@@ -1,4 +1,4 @@
-# erDiagram
+# MerDiagram
     USUARIOS ||--o{ ALOJAMIENTOS : "ofrece (Anfitrion)"
     USUARIOS ||--|| PREFERENCIAS_CONVIVENCIA : "define"
     USUARIOS ||--o{ USUARIO_INTERESES : "registra"
