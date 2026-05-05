@@ -1,4 +1,5 @@
 const pool = require('../../database');
+const bcrypt = require('bcrypt');
 
 // --- FUNCIÓN PARA OBTENER (GET) ---
 const obtenerUsuarios = async (req, res) => {
@@ -30,6 +31,9 @@ const crearUsuario = async (req, res) => {
             fecha_nacimiento, sexo_biologico, identidad_genero, 
             universidad, carrera, anio_ingreso, biografia, rol 
         } = req.body;
+        
+        const saltRounds = 10;
+        const passwordEncriptada = await bcrypt.hash(password, saltRounds);
 
         conn = await pool.getConnection();
 
@@ -40,7 +44,7 @@ const crearUsuario = async (req, res) => {
         `;
         
         const result = await conn.query(query, [
-            nombre_completo, email, password, telefono, foto_perfil, 
+            nombre_completo, email, passwordEncriptada, telefono, foto_perfil, 
             fecha_nacimiento, sexo_biologico, identidad_genero, 
             universidad, carrera, anio_ingreso, biografia, rol
         ]);
@@ -59,7 +63,50 @@ const crearUsuario = async (req, res) => {
     }
 };
 
+// --- FUNCIÓN PARA ACTUALIZAR PERFIL (PUT) ---
+const actualizarPerfil = async (req, res) => {
+    let conn;
+    try {
+        // 1. Capturamos el ID que viene en la URL (ej: /api/usuarios/1)
+        const { id } = req.params; 
+        
+        // 2. Capturamos los datos nuevos que vienen en el Body desde Postman/Frontend
+        const { telefono, foto_perfil, universidad, carrera, biografia, rol } = req.body;
+
+        conn = await pool.getConnection();
+
+        // 3. Preparamos nuestra consulta UPDATE de SQL
+        const query = `
+            UPDATE Usuarios 
+            SET telefono = ?, foto_perfil = ?, universidad = ?, carrera = ?, biografia = ?, rol = ?
+            WHERE id_usuario = ?
+        `;
+        
+        // 4. Ejecutamos pasando los datos, IMPORTANTE: el 'id' siempre va al final porque es el último '?'
+        const result = await conn.query(query, [
+            telefono, foto_perfil, universidad, carrera, biografia, rol, id
+        ]);
+
+        // Si affectedRows es 0, significa que el ID no existe en la base de datos
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        res.status(200).json({
+            exito: true,
+            mensaje: "¡Perfil actualizado correctamente en Roomeet!"
+        });
+
+    } catch (err) {
+        console.error("Error al actualizar perfil:", err);
+        res.status(500).json({ error: "Hubo un problema al actualizar el perfil" });
+    } finally {
+        if (conn) conn.release();
+    }
+};
+
 module.exports = {
     obtenerUsuarios,
-    crearUsuario
+    crearUsuario,
+    actualizarPerfil
 };

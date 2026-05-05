@@ -10,4 +10,6 @@ router.get('/', usuariosController.obtenerUsuarios);
 // --- NUEVA RUTA: Cuando alguien haga un POST (Crear usuario nuevo) ---
 router.post('/', usuariosController.crearUsuario);
 
+router.put('/:id', usuariosController.actualizarPerfil);
+
 module.exports = router;
