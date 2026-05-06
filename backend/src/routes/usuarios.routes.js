@@ -1,15 +1,14 @@
 const express = require('express');
 const router = express.Router();
-
-// Importamos el controlador
 const usuariosController = require('../controllers/usuarios.controller');
 
-// Cuando alguien haga un GET (Pedir lista de usuarios)
+// Importamos el middleware que acabamos de crear
+const { verificarToken } = require('../middlewares/verificarToken');
+
+// La ruta GET queda pública (cualquiera puede ver la lista de usuarios)
 router.get('/', usuariosController.obtenerUsuarios);
 
-// --- NUEVA RUTA: Cuando alguien haga un POST (Crear usuario nuevo) ---
-router.post('/', usuariosController.crearUsuario);
-
-router.put('/:id', usuariosController.actualizarPerfil);
+// Ponemos el verificarToken justo en el medio para proteger la ruta PUT
+router.put('/:id', verificarToken, usuariosController.actualizarPerfil);
 
 module.exports = router;
