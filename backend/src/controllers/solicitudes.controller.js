@@ -96,6 +96,7 @@ const responderSolicitud = async (req, res) => {
     }
 
     try {
+        // 1. Actualizamos el estado de la solicitud a 'aceptada' o 'rechazada'
         const queryUpdate = 'UPDATE Solicitudes SET estado = ? WHERE id_solicitud = ?';
         const [resultado] = await db.query(queryUpdate, [nuevo_estado, id_solicitud]);
 
@@ -105,9 +106,30 @@ const responderSolicitud = async (req, res) => {
             });
         }
 
+        // 2. LA MAGIA: Si el anfitrión aceptó, restamos 1 cupo al alojamiento
+        if (nuevo_estado === 'aceptada') {
+            
+            // Primero, descubrimos a qué alojamiento corresponde esta solicitud
+            const queryBuscarAlojamiento = 'SELECT id_alojamiento FROM Solicitudes WHERE id_solicitud = ?';
+            const [solicitudInfo] = await db.query(queryBuscarAlojamiento, [id_solicitud]);
+
+            if (solicitudInfo.length > 0) {
+                const id_alojamiento = solicitudInfo[0].id_alojamiento;
+
+                // Actualizamos restando 1, asegurándonos de que no baje de cero
+                const queryRestarCupo = `
+                    UPDATE Alojamientos 
+                    SET cupos_disponibles = cupos_disponibles - 1 
+                    WHERE id_alojamiento = ? AND cupos_disponibles > 0
+                `;
+                
+                await db.query(queryRestarCupo, [id_alojamiento]);
+            }
+        }
+
         return res.status(200).json({
             exito: true,
-            mensaje: `¡La solicitud ha sido marcada como ${nuevo_estado}!`
+            mensaje: `¡La solicitud ha sido marcada como ${nuevo_estado} en Roomeet!`
         });
 
     } catch (error) {

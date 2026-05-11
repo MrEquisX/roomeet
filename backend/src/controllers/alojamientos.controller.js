@@ -1,4 +1,4 @@
-const db = require('../db/connection'); // Asegúrate de que esta ruta coincida con tu estructura
+const db = require('../db/connection'); 
 
 const crearAlojamiento = async (req, res) => {
     // Extraemos el ID directamente del token (el middleware verificarToken lo puso aquí)
@@ -11,6 +11,14 @@ const crearAlojamiento = async (req, res) => {
     const precio_mensual = req.body.precio_mensual;
     const capacidad_total = req.body.capacidad_total;
     const cupos_disponibles = req.body.cupos_disponibles;
+
+    // Declaramos la variable para la foto
+    let foto_alojamiento = null;
+
+    // Si Multer interceptó un archivo de imagen, guardamos la ruta
+    if (req.file) {
+        foto_alojamiento = '/uploads/alojamientos/' + req.file.filename;
+    }
 
     // Validación de campos obligatorios
     if (!titulo) {
@@ -26,8 +34,8 @@ const crearAlojamiento = async (req, res) => {
     try {
         const queryInsertar = `
             INSERT INTO Alojamientos 
-            (id_anfitrion, titulo, descripcion, direccion, precio_mensual, capacidad_total, cupos_disponibles) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id_anfitrion, titulo, descripcion, direccion, precio_mensual, capacidad_total, cupos_disponibles, foto_alojamiento) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         const valores = [
@@ -37,7 +45,8 @@ const crearAlojamiento = async (req, res) => {
             direccion, 
             precio_mensual, 
             capacidad_total, 
-            cupos_disponibles
+            cupos_disponibles,
+            foto_alojamiento // Agregamos la foto a los valores a insertar
         ];
 
         const [resultado] = await db.query(queryInsertar, valores);
@@ -45,7 +54,8 @@ const crearAlojamiento = async (req, res) => {
         return res.status(201).json({
             exito: true,
             mensaje: '¡Alojamiento publicado exitosamente en Roomeet!',
-            id_alojamiento: resultado.insertId
+            id_alojamiento: resultado.insertId,
+            urlImagen: foto_alojamiento
         });
 
     } catch (error) {
@@ -58,20 +68,42 @@ const crearAlojamiento = async (req, res) => {
 
 const obtenerAlojamientos = async (req, res) => {
     try {
-        // Aquí podríamos hacer un JOIN para traer el nombre del anfitrión también
-        const queryBuscar = 'SELECT * FROM Alojamientos ORDER BY fecha_creacion DESC';
-        const [alojamientos] = await db.query(queryBuscar);
+        // 1. Declaración explícita de filtros que vienen por la URL (Query Params)
+        const precioMax = req.query.precioMax;
+        const busqueda = req.query.busqueda;
+
+        // 2. Base de la consulta SQL
+        let querySql = "SELECT * FROM Alojamientos WHERE 1=1";
+        let parametros = [];
+
+        // 3. Si el usuario envía un precio máximo, lo agregamos al filtro
+        if (precioMax) {
+            querySql += " AND precio_mensual <= ?";
+            parametros.push(Number(precioMax));
+        }
+
+        // 4. Si el usuario escribe algo en el buscador (título o dirección)
+        if (busqueda) {
+            querySql += " AND (titulo LIKE ? OR direccion LIKE ?)";
+            const terminoBusqueda = `%${busqueda}%`;
+            parametros.push(terminoBusqueda, terminoBusqueda);
+        }
+
+        // 5. Ordenamos por los más nuevos
+        querySql += " ORDER BY fecha_creacion DESC";
+
+        // Usamos db.query directamente como en la función de crear
+        const [rows] = await db.query(querySql, parametros);
 
         return res.status(200).json({
             exito: true,
-            data: alojamientos
+            cantidad: rows.length,
+            data: rows
         });
 
-    } catch (error) {
-        console.error('Error al obtener alojamientos:', error);
-        return res.status(500).json({ 
-            mensaje: 'Error al consultar los alojamientos disponibles.' 
-        });
+    } catch (err) {
+        console.error("Error al filtrar alojamientos:", err);
+        return res.status(500).json({ error: "Error al consultar la base de datos" });
     }
 };
 

@@ -4,27 +4,33 @@ require('dotenv').config();
 
 // 1. Importamos nuestras rutas
 const usuariosRoutes = require('./src/routes/usuarios.routes');
-// --- LO NUEVO: Importamos las rutas de Auth y Alojamientos ---
 const authRoutes = require('./src/routes/auth.routes');
 const alojamientosRoutes = require('./src/routes/alojamientos.routes');
 const solicitudesRoutes = require('./src/routes/solicitudes.routes');
+// --- LO NUEVO: Importamos las rutas de Favoritos ---
+const favoritosRoutes = require('./src/routes/favoritos.routes');
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// 2. Le decimos a Express que use nuestras rutas
-// Todo lo que empiece con '/api/usuarios' se va a ir a usuarios.routes.js
+// 2. Definición de Endpoints
+// Gestión de usuarios y perfiles
 app.use('/api/usuarios', usuariosRoutes);
 
-// --- LO NUEVO: Conectamos los endpoints ---
-// Todo lo que empiece con '/api/auth' (ej. /api/auth/login) se va a auth.routes.js
+// Autenticación (Login y Registro)
 app.use('/api/auth', authRoutes);
 
-// Todo lo que empiece con '/api/alojamientos' se va a alojamientos.routes.js
+// Gestión de publicaciones de alojamientos
 app.use('/api/alojamientos', alojamientosRoutes);
 
+// Gestión de solicitudes entre roomies
 app.use('/api/solicitudes', solicitudesRoutes);
+
+// --- LO NUEVO: Conectamos el endpoint de Favoritos ---
+app.use('/api/favoritos', favoritosRoutes);
+
 
 // Ruta de bienvenida opcional
 app.get('/', (req, res) => {

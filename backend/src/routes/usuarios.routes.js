@@ -2,13 +2,21 @@ const express = require('express');
 const router = express.Router();
 const usuariosController = require('../controllers/usuarios.controller');
 
-// Importamos el middleware que acabamos de crear
+// 1. Importamos el middleware de seguridad que ya tenías
 const { verificarToken } = require('../middlewares/verificarToken');
 
-// La ruta GET queda pública (cualquiera puede ver la lista de usuarios)
+// 2. Importamos el middleware de subida de fotos que creamos recién
+const upload = require('../middlewares/subirFoto');
+
+// La ruta GET se mantiene igual
 router.get('/', usuariosController.obtenerUsuarios);
 
-// Ponemos el verificarToken justo en el medio para proteger la ruta PUT
-router.put('/:id', verificarToken, usuariosController.actualizarPerfil);
+// En la ruta PUT, agregamos el "upload" justo después de verificar el token
+router.put(
+    '/:id', 
+    verificarToken, 
+    upload.single('foto_perfil'), 
+    usuariosController.actualizarPerfil
+);
 
 module.exports = router;

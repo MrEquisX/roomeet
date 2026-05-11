@@ -29,11 +29,18 @@ const actualizarPerfil = async (req, res) => {
         // Declaración explícita de variables entrantes
         const id = req.params.id;
         const telefono = req.body.telefono;
-        const foto_perfil = req.body.foto_perfil;
         const universidad = req.body.universidad;
         const carrera = req.body.carrera;
         const biografia = req.body.biografia;
         const rol = req.body.rol;
+        
+        // Declaramos foto_perfil con 'let' para poder cambiar su valor si viene un archivo
+        let foto_perfil = req.body.foto_perfil;
+
+        // Si Multer interceptó un archivo de imagen, actualizamos la ruta
+        if (req.file) {
+            foto_perfil = '/uploads/perfiles/' + req.file.filename;
+        }
 
         conn = await pool.getConnection();
 
@@ -53,7 +60,8 @@ const actualizarPerfil = async (req, res) => {
 
         return res.status(200).json({
             exito: true,
-            mensaje: "¡Perfil actualizado correctamente en Roomeet!"
+            mensaje: "¡Perfil actualizado correctamente en Roomeet!",
+            urlImagen: foto_perfil
         });
 
     } catch (err) {
