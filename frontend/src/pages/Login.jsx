@@ -77,9 +77,12 @@ const Login = () => {
         </form>
 
         <div className="mt-8 text-center space-y-4">
-          <a href="#" className="block text-sm text-blue-600 hover:text-blue-800 font-medium">
+          
+          {/* Aquí está el cambio a <Link> para conectar con RecuperarPassword.jsx */}
+          <Link to="/recuperar" className="block text-sm text-blue-600 hover:text-blue-800 font-medium">
             ¿Olvidaste tu contraseña?
-          </a>
+          </Link>
+          
           <p className="text-sm text-gray-600">
             ¿No tienes una cuenta? <br/>
             <Link to="/registro" className="text-blue-600 hover:text-blue-800 font-bold">
