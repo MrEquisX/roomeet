@@ -1,48 +1,33 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
-const EditarPerfil = () => {
+const CompletarPerfil = () => {
   const navigate = useNavigate();
-
-  // Estados del modal
+  // Estado para controlar si mostramos la ventana emergente de advertencia
   const [mostrarAlerta, setMostrarAlerta] = useState(false);
-
-  // Estados de los datos del usuario (simulando que vienen de la BD)
-  const [bio, setBio] = useState("Busco compañeros tranquilos que respeten los horarios de estudio. Me gusta el básquet y los videojuegos.");
-  const [fuma, setFuma] = useState(false);
-  const [mascotas, setMascotas] = useState(true);
-  const [visitas, setVisitas] = useState(false);
-  const [orden, setOrden] = useState(4);
-  const [ruido, setRuido] = useState(2);
-  const [horario, setHorario] = useState("diurno");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log("Guardando datos:", { bio, fuma, mascotas, visitas, orden, ruido, horario });
-    navigate('/perfil');
+    navigate('/dashboard');
   };
 
-  const handleCancelarClick = () => {
+  // Cuando hace clic en omitir, mostramos la alerta
+  const handleOmitirClick = () => {
     setMostrarAlerta(true);
   };
 
-  const confirmarCancelar = () => {
-    navigate('/perfil');
+  // Si confirma en la alerta que quiere omitir, lo mandamos al dashboard
+  const confirmarOmitir = () => {
+    navigate('/dashboard');
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4 font-sans justify-center relative">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 flex flex-col relative">
         
-        {/* Header (Igualando el estilo de CompletarPerfil, pero con botón volver) */}
-        <div className="flex items-center justify-between mb-2">
-          <button onClick={handleCancelarClick} className="text-gray-400 hover:text-blue-600 p-2 -ml-2">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <h1 className="text-2xl font-bold text-blue-900 text-center flex-1 -ml-4">Editar Perfil</h1>
-        </div>
-        <p className="text-sm text-gray-500 text-center mb-8">
-          Actualiza tus preferencias para encontrar compañeros más afines a ti.
+        <h1 className="text-2xl font-bold text-blue-900 text-center mb-2">¡Cuenta Creada! 🎉</h1>
+        <p className="text-sm text-gray-500 text-center mb-6">
+          Para ayudarte a encontrar compañeros compatibles, cuéntanos cómo es tu estilo de vida y preferencias.
         </p>
 
         <form onSubmit={handleSubmit} className="w-full space-y-6">
@@ -52,14 +37,7 @@ const EditarPerfil = () => {
             <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">Sobre ti</h2>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Mini Biografía</label>
-              <textarea 
-                required 
-                rows="3" 
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="Busco un ambiente tranquilo para estudiar, me gusta hacer deporte los fines de semana..." 
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              ></textarea>
+              <textarea required rows="3" placeholder="Busco un ambiente tranquilo para estudiar, me gusta hacer deporte los fines de semana..." className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
             </div>
           </section>
 
@@ -70,46 +48,30 @@ const EditarPerfil = () => {
             <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
               <span className="text-sm font-semibold text-gray-700">¿Fumas?</span>
               <div className="flex gap-3">
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="fuma" checked={fuma === true} onChange={() => setFuma(true)} /> Sí
-                </label>
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="fuma" checked={fuma === false} onChange={() => setFuma(false)} /> No
-                </label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="fuma" value="true" /> Sí</label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="fuma" value="false" defaultChecked /> No</label>
               </div>
             </div>
 
             <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
               <span className="text-sm font-semibold text-gray-700">¿Aceptas mascotas?</span>
               <div className="flex gap-3">
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="mascotas" checked={mascotas === true} onChange={() => setMascotas(true)} /> Sí
-                </label>
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="mascotas" checked={mascotas === false} onChange={() => setMascotas(false)} /> No
-                </label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="mascotas" value="true" defaultChecked /> Sí</label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="mascotas" value="false" /> No</label>
               </div>
             </div>
 
             <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
               <span className="text-sm font-semibold text-gray-700">¿Visitas frecuentes?</span>
               <div className="flex gap-3">
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="visitas" checked={visitas === true} onChange={() => setVisitas(true)} /> Sí
-                </label>
-                <label className="flex items-center gap-1 text-sm">
-                  <input type="radio" name="visitas" checked={visitas === false} onChange={() => setVisitas(false)} /> No
-                </label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="visitas" value="true" /> Sí</label>
+                <label className="flex items-center gap-1 text-sm"><input type="radio" name="visitas" value="false" defaultChecked /> No</label>
               </div>
             </div>
 
             <div className="pt-2">
               <label className="block text-xs font-semibold text-gray-700 mb-2 ml-1">Nivel de Orden (1 al 5)</label>
-              <input 
-                type="range" min="1" max="5" 
-                value={orden} onChange={(e) => setOrden(e.target.value)} 
-                className="w-full accent-blue-600" 
-              />
+              <input type="range" min="1" max="5" defaultValue="3" className="w-full accent-blue-600" />
               <div className="flex justify-between text-xs text-gray-400 px-1 mt-1">
                 <span>Relajado</span>
                 <span>Estricto</span>
@@ -118,11 +80,7 @@ const EditarPerfil = () => {
 
             <div className="pt-2">
               <label className="block text-xs font-semibold text-gray-700 mb-2 ml-1">Tolerancia al Ruido (1 al 5)</label>
-              <input 
-                type="range" min="1" max="5" 
-                value={ruido} onChange={(e) => setRuido(e.target.value)} 
-                className="w-full accent-blue-600" 
-              />
+              <input type="range" min="1" max="5" defaultValue="3" className="w-full accent-blue-600" />
               <div className="flex justify-between text-xs text-gray-400 px-1 mt-1">
                 <span>Silencio total</span>
                 <span>Fiesta</span>
@@ -130,11 +88,8 @@ const EditarPerfil = () => {
             </div>
 
             <div className="pt-2">
-              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Horario Preferido</label>
-              <select 
-                value={horario} onChange={(e) => setHorario(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-              >
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Horario de Clases</label>
+              <select className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm">
                 <option value="diurno">Diurno (Estudio de día)</option>
                 <option value="nocturno">Nocturno (Estudio de noche)</option>
                 <option value="mixto">Mixto (Flexible)</option>
@@ -147,10 +102,10 @@ const EditarPerfil = () => {
             <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">Tus Intereses</h2>
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
               <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
-                <input type="checkbox" defaultChecked className="accent-blue-600 w-4 h-4" /> <span className="text-xs font-medium">Deportes ⚽</span>
+                <input type="checkbox" className="accent-blue-600 w-4 h-4" /> <span className="text-xs font-medium">Deportes ⚽</span>
               </label>
               <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
-                <input type="checkbox" defaultChecked className="accent-blue-600 w-4 h-4" /> <span className="text-xs font-medium">Gaming 🎮</span>
+                <input type="checkbox" className="accent-blue-600 w-4 h-4" /> <span className="text-xs font-medium">Gaming 🎮</span>
               </label>
               <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
                 <input type="checkbox" className="accent-blue-600 w-4 h-4" /> <span className="text-xs font-medium">Música 🎵</span>
@@ -185,46 +140,46 @@ const EditarPerfil = () => {
               type="submit" 
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all"
             >
-              Guardar Cambios
+              Guardar y Entrar a Roomeet
             </button>
             
             <button 
               type="button" 
-              onClick={handleCancelarClick}
+              onClick={handleOmitirClick}
               className="w-full bg-transparent border-2 border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400 font-bold py-3 rounded-2xl transition-all"
             >
-              Cancelar
+              Omitir por ahora
             </button>
           </div>
           
         </form>
       </div>
 
-      {/* VENTANA EMERGENTE (MODAL) DE CANCELACIÓN */}
+      {/* VENTANA EMERGENTE (MODAL) DE ADVERTENCIA */}
       {mostrarAlerta && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4 transition-opacity">
           <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border border-gray-100">
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 mb-4 mx-auto">
-              <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-100 mb-4 mx-auto">
+              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 text-center mb-2">¿Descartar cambios?</h3>
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-2">¿Seguro que quieres omitir?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              Los cambios que hiciste no se guardarán. Recuerda que mantener tu perfil detallado y actualizado aumenta significativamente tus posibilidades de encontrar al compañero ideal.
+              Al tener tu perfil incompleto, serás menos fiable para la comunidad y tendrás menos posibilidades de hacer Match. Puedes completarlo más tarde en tu perfil.
             </p>
-            <div className="flex flex-col gap-2">
+            <div className="flex gap-3">
               <button 
                 onClick={() => setMostrarAlerta(false)}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-md"
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
               >
-                Seguir editando
+                Volver
               </button>
               <button 
-                onClick={confirmarCancelar}
-                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
+                onClick={confirmarOmitir}
+                className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl transition-colors"
               >
-                Sí, salir sin guardar
+                Sí, omitir
               </button>
             </div>
           </div>
@@ -235,4 +190,4 @@ const EditarPerfil = () => {
   );
 };
 
-export default EditarPerfil;
+export default CompletarPerfil;

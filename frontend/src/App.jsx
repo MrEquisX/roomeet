@@ -9,6 +9,7 @@ import RecuperarPassword from './pages/RecuperarPassword';
 import Perfil from './pages/Perfil'; 
 import Conversacion from './pages/Conversacion';
 import EditarPerfil from './pages/EditarPerfil';
+import CompletarPerfil from './pages/CompletarPerfil';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/chat/:id" element={<Conversacion />} />
         <Route path="/editar-perfil" element={<EditarPerfil />} />
+        <Route path="/completar-perfil" element={<CompletarPerfil />} />
       </Routes>
     </BrowserRouter>
   );

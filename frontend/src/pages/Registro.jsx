@@ -1,108 +1,111 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Registro = () => {
+  const navigate = useNavigate();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    navigate('/completar-perfil');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4 font-sans">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 flex flex-col">
         
-        {/* Título */}
-        <h1 className="text-3xl font-bold text-blue-900 text-center mb-2">Crea tu Perfil</h1>
+        <h1 className="text-3xl font-bold text-blue-900 text-center mb-2">Crea tu Cuenta</h1>
         <p className="text-sm text-gray-500 text-center mb-8">
-          Únete a Roomeet y define tu estilo de vida
+          Ingresa tus datos principales para unirte a Roomeet
         </p>
 
-        <form className="w-full space-y-8">
+        <form onSubmit={handleSubmit} className="w-full space-y-6">
           
-          {/* SECCIÓN 1: TABLA USUARIOS */}
+          {/* SECCIÓN: CUENTA */}
           <section className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">1. Datos Personales</h2>
+            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">1. Credenciales</h2>
             
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Nombre Completo</label>
-              <input type="text" placeholder="Ej. André Limari" className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Correo Institucional</label>
+              <input required type="email" placeholder="estudiante@pucv.cl" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Correo Institucional</label>
-              <input type="email" placeholder="estudiante@pucv.cl" className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">¿Qué buscas en Roomeet?</label>
-              <select className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                <option value="buscador">Busco una pieza o compañeros</option>
-                <option value="anfitrion">Soy Anfitrión (Tengo una pieza para arrendar)</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1 ml-1">Esto define tu Rol en la plataforma.</p>
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Contraseña</label>
+              <input required type="password" placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
             </div>
           </section>
 
-          {/* SECCIÓN 2: TABLA PREFERENCIAS_CONVIVENCIA */}
+          {/* SECCIÓN: DATOS PERSONALES */}
           <section className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">2. Preferencias de Convivencia</h2>
+            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">2. Datos Personales</h2>
             
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
-              <span className="text-sm font-semibold text-gray-700">¿Fumas?</span>
-              <div className="flex gap-2">
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="fuma" value="true" /> Sí</label>
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="fuma" value="false" defaultChecked /> No</label>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
-              <span className="text-sm font-semibold text-gray-700">¿Aceptas mascotas?</span>
-              <div className="flex gap-2">
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="mascotas" value="true" defaultChecked /> Sí</label>
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="mascotas" value="false" /> No</label>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
-              <span className="text-sm font-semibold text-gray-700">¿Visitas frecuentes?</span>
-              <div className="flex gap-2">
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="visitas" value="true" /> Sí</label>
-                <label className="flex items-center gap-1 text-sm"><input type="radio" name="visitas" value="false" defaultChecked /> No</label>
-              </div>
-            </div>
-
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Nivel de Orden (1 al 5)</label>
-              <input type="range" min="1" max="5" defaultValue="3" className="w-full accent-blue-600" />
-              <div className="flex justify-between text-xs text-gray-400 px-1 mt-1">
-                <span>Relajado</span>
-                <span>Estricto</span>
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Nombre Completo</label>
+              <input required type="text" placeholder="Ej. André Limari" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Teléfono</label>
+                <input required type="tel" placeholder="+56 9..." className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Nacimiento</label>
+                <input required type="date" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-600" />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Tolerancia al Ruido (1 al 5)</label>
-              <input type="range" min="1" max="5" defaultValue="3" className="w-full accent-blue-600" />
-              <div className="flex justify-between text-xs text-gray-400 px-1 mt-1">
-                <span>Silencio total</span>
-                <span>Fiesta</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Sexo Biológico</label>
+                <select required className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm">
+                  <option value="">Seleccionar...</option>
+                  <option value="M">Masculino</option>
+                  <option value="F">Femenino</option>
+                </select>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Horario Preferido</label>
-              <select className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                <option value="diurno">Diurno (Mañanero)</option>
-                <option value="nocturno">Nocturno (Búho)</option>
-                <option value="mixto">Mixto</option>
-              </select>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Identidad de Género</label>
+                <input type="text" placeholder="Opcional" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
             </div>
           </section>
 
-          {/* Botón Principal */}
+          {/* SECCIÓN: PERFIL ACADÉMICO */}
+          <section className="space-y-4">
+            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">3. Perfil Académico</h2>
+            
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Universidad</label>
+                <select required className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm">
+                  <option value="PUCV">PUCV</option>
+                  <option value="UTFSM">UTFSM</option>
+                  <option value="UV">UV</option>
+                  <option value="UPLA">UPLA</option>
+                  <option value="OTRA">Otra...</option>
+                </select>
+              </div>
+              <div className="col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Ingreso</label>
+                <input required type="number" placeholder="2020" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Carrera</label>
+              <input required type="text" placeholder="Ej. Ingeniería en Informática" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+            </div>
+
+          </section>
+
           <button 
-            type="button" 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all mt-4"
+            type="submit" 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all mt-6"
           >
-            Completar Registro
+            Continuar
           </button>
         </form>
 
-        {/* Volver */}
         <div className="mt-8 text-center">
           <Link to="/login" className="text-sm text-gray-500 hover:text-blue-600 font-medium">
             ¿Ya tienes cuenta? Inicia sesión aquí

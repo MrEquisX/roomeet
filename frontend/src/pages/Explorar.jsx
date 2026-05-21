@@ -46,9 +46,9 @@ const Explorar = () => {
             <span className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium">🚭 Sin humo</span>
             <span className="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium">📚 Estudiosa</span>
           </div>
-          <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl transition-all shadow-md">
+          <Link to="/chat/1" className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl transition-all shadow-md">
             Enviar mensaje
-          </button>
+          </Link>
         </div>
 
         {/* Tarjeta Candidato 2 */}
@@ -73,9 +73,9 @@ const Explorar = () => {
             <span className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-xs font-medium">🎮 Gamer</span>
             <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium">✨ Ordenada</span>
           </div>
-          <button className="w-full bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-3 rounded-2xl transition-all">
-            Ver Perfil Completo
-          </button>
+          <Link to="/chat/2" className="w-full block text-center bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-3 rounded-2xl transition-all">
+            Enviar mensaje
+          </Link>
         </div>
 
       </div>
