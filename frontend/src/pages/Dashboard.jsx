@@ -153,12 +153,12 @@ const Dashboard = () => {
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               <div className="flex items-start gap-4">
                 <Link to="/usuario/2" className="relative flex-shrink-0">
-                  <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-sm">SM</div>
+                  <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-sm">FG</div>
                   <div className="absolute -bottom-1.5 -right-1.5 bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-lg border border-white">87%</div>
                 </Link>
                 <div className="flex-1 ml-1 flex flex-col justify-center">
                   <div className="flex justify-between items-start">
-                    <Link to="/usuario/2" className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors leading-tight">Sara Morales</Link>
+                    <Link to="/usuario/2" className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors leading-tight">Felipe González</Link>
                     <div title="Busca vivienda" className="text-red-500 bg-red-50 p-2 rounded-xl border border-red-100 shadow-sm flex-shrink-0">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4l16 16"/></svg>
                     </div>

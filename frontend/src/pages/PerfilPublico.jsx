@@ -12,10 +12,10 @@ const PerfilPublico = () => {
     carrera: "Ing. Comercial",
     universidad: "PUCV",
     bio: "Soy ordenado, me gusta cocinar los fines de semana y busco un depto cerca del plan de Viña.",
-    tieneDepto: true,
+    tieneDepto: false,
     datosDepto: {
-      sector: "Viña del Mar - Plan",
-      precio: "$ 250.000 + GGCC",
+      sector: "Viña del Mar",
+      precio: "$ 250.000",
       banos: "Privado"
     },
     preferencias: { fuma: false, mascotas: false, orden: 5, ruido: 1 },
