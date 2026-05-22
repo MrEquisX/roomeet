@@ -10,6 +10,9 @@ import Perfil from './pages/Perfil';
 import Conversacion from './pages/Conversacion';
 import EditarPerfil from './pages/EditarPerfil';
 import CompletarPerfil from './pages/CompletarPerfil';
+import NuevaPassword from './pages/NuevaPassword';
+import AnadirVivienda from './pages/AnadirVivienda';
+import PerfilPublico from './pages/PerfilPublico';
 
 function App() {
   return (
@@ -27,6 +30,9 @@ function App() {
         <Route path="/chat/:id" element={<Conversacion />} />
         <Route path="/editar-perfil" element={<EditarPerfil />} />
         <Route path="/completar-perfil" element={<CompletarPerfil />} />
+        <Route path="/nueva-password" element={<NuevaPassword />} />
+        <Route path="/anadir-vivienda" element={<AnadirVivienda />} />
+        <Route path="/usuario/:id" element={<PerfilPublico />} />
       </Routes>
     </BrowserRouter>
   );

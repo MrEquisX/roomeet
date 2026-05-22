@@ -79,14 +79,6 @@ const Chats = () => {
           </svg>
           <span className="text-[10px] font-medium">Descubrir</span>
         </Link>
-
-        {/* 2. Explorar - INACTIVO */}
-        <Link to="/explorar" className="flex flex-col items-center text-gray-400 hover:text-blue-500">
-          <svg className="w-6 h-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className="text-[10px] font-medium">Explorar</span>
-        </Link>
         
         {/* 3. Chats - ACTIVO */}
         <Link to="/chats" className="flex flex-col items-center text-blue-600 relative">
