@@ -1,81 +1,92 @@
-const pool = require('../../database');
+const mongoose = require('mongoose');
+const Usuario = require('../models/Usuario');
+
+const obtenerIdDesdeToken = (req) =>
+    req.usuario?.id ?? req.usuario?.id_usuario;
 
 // --- FUNCIÓN PARA OBTENER (GET) ---
 const obtenerUsuarios = async (req, res) => {
-    let conn;
     try {
-        conn = await pool.getConnection();
-        const rows = await conn.query("SELECT * FROM Usuarios");
-        
+        const usuarios = await Usuario.find()
+            .select('-password')
+            .lean();
+
         return res.status(200).json({
             exito: true,
-            mensaje: "Usuarios obtenidos correctamente",
-            data: rows
+            mensaje: 'Usuarios obtenidos correctamente',
+            data: usuarios,
         });
     } catch (err) {
-        console.error("Error al obtener usuarios:", err);
-        return res.status(500).json({ error: "Error al consultar la base de datos" });
-    } finally {
-        if (conn) {
-            conn.release();
-        }
+        console.error('Error al obtener usuarios:', err);
+        return res.status(500).json({ error: 'Error al consultar la base de datos' });
     }
 };
 
 // --- FUNCIÓN PARA ACTUALIZAR PERFIL (PUT) ---
 const actualizarPerfil = async (req, res) => {
-    let conn;
     try {
-        // Declaración explícita de variables entrantes
-        const id = req.params.id;
-        const telefono = req.body.telefono;
-        const universidad = req.body.universidad;
-        const carrera = req.body.carrera;
-        const biografia = req.body.biografia;
-        const rol = req.body.rol;
-        
-        // Declaramos foto_perfil con 'let' para poder cambiar su valor si viene un archivo
-        let foto_perfil = req.body.foto_perfil;
+        const { id } = req.params;
+        const { telefono, universidad, carrera, biografia, rol } = req.body;
 
-        // Si Multer interceptó un archivo de imagen, actualizamos la ruta
+        let foto_perfil = req.body.foto_perfil;
         if (req.file) {
             foto_perfil = '/uploads/perfiles/' + req.file.filename;
         }
 
-        conn = await pool.getConnection();
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: 'ID de usuario inválido' });
+        }
 
-        const query = `
-            UPDATE Usuarios 
-            SET telefono = ?, foto_perfil = ?, universidad = ?, carrera = ?, biografia = ?, rol = ?
-            WHERE id_usuario = ?
-        `;
-        
-        const result = await conn.query(query, [
-            telefono, foto_perfil, universidad, carrera, biografia, rol, id
-        ]);
+        const actualizacion = {};
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: "Usuario no encontrado" });
+        if (universidad !== undefined || carrera !== undefined) {
+            actualizacion.perfil_academico = {};
+            if (universidad !== undefined) {
+                actualizacion.perfil_academico.universidad = universidad;
+            }
+            if (carrera !== undefined) {
+                actualizacion.perfil_academico.carrera = carrera;
+            }
+        }
+
+        if (rol !== undefined) {
+            actualizacion.rol = rol;
+        }
+
+        // Descomenta cuando agregues estos campos al schema Usuario:
+        // if (telefono !== undefined) actualizacion.telefono = telefono;
+        // if (biografia !== undefined) actualizacion.biografia = biografia;
+        // if (foto_perfil !== undefined) actualizacion.foto_perfil = foto_perfil;
+
+        const usuarioActualizado = await Usuario.findByIdAndUpdate(
+            id,
+            { $set: actualizacion },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!usuarioActualizado) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
         }
 
         return res.status(200).json({
             exito: true,
-            mensaje: "¡Perfil actualizado correctamente en Roomeet!",
-            urlImagen: foto_perfil
+            mensaje: '¡Perfil actualizado correctamente en Roomeet!',
+            urlImagen: foto_perfil,
+            data: usuarioActualizado,
         });
-
     } catch (err) {
-        console.error("Error al actualizar perfil:", err);
-        return res.status(500).json({ error: "Hubo un problema al actualizar el perfil" });
-    } finally {
-        if (conn) {
-            conn.release();
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({
+                error: 'Datos de perfil inválidos',
+                detalles: Object.values(err.errors).map((e) => e.message),
+            });
         }
+        console.error('Error al actualizar perfil:', err);
+        return res.status(500).json({ error: 'Hubo un problema al actualizar el perfil' });
     }
 };
 
-// Exportamos solo las dos funciones que quedaron
 module.exports = {
     obtenerUsuarios,
-    actualizarPerfil
+    actualizarPerfil,
 };

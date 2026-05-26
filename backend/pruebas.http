@@ -1,0 +1,8 @@
+POST http://localhost:3000/api/auth/registro
+Content-Type: application/json
+
+{
+  "nombre": "Andre Limari",
+  "email": "andre.test@roomeet.cl",
+  "password": "password123"
+}

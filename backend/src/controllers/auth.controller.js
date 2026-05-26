@@ -1,107 +1,98 @@
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken'); // Agregamos JWT
-const db = require('../db/connection'); 
+const jwt = require('jsonwebtoken');
+const Usuario = require('../models/Usuario'); // Importamos nuestro nuevo modelo
 
 const registrarUsuario = async (req, res) => {
-    const nombre = req.body.nombre;
-    const email = req.body.email;
-    const password = req.body.password;
+    const { 
+        nombre, 
+        email, 
+        password, 
+        perfil_academico, 
+        preferencias_convivencia, 
+        intereses 
+    } = req.body;
 
-    if (!nombre || !email || !password) {
-        return res.status(400).json({ 
-            mensaje: 'Error: Todos los campos son obligatorios.' 
-        });
+    // Validación de campos obligatorios básicos
+    if (!nombre || !email || !password || !perfil_academico || !preferencias_convivencia) {
+        return res.status(400).json({ mensaje: 'Error: Todos los campos son obligatorios (nombre, email, password, perfil_academico, preferencias_convivencia).' });
+    }
+
+    // Validar que nivel_orden exista dentro de preferencias_convivencia
+    if (
+        !Object.prototype.hasOwnProperty.call(preferencias_convivencia, "nivel_orden") ||
+        preferencias_convivencia.nivel_orden === undefined ||
+        preferencias_convivencia.nivel_orden === null
+    ) {
+        return res.status(400).json({ mensaje: "Error: El campo 'nivel_orden' en preferencias_convivencia es obligatorio." });
     }
 
     try {
-        const queryVerificar = 'SELECT * FROM Usuarios WHERE email = ?';
-        const [usuariosExistentes] = await db.query(queryVerificar, [email]);
-
-        if (usuariosExistentes.length > 0) {
-            return res.status(409).json({ 
-                mensaje: 'Error: El correo ingresado ya está registrado.' 
-            });
+        // Buscar usuario existente
+        const usuarioExistente = await Usuario.findOne({ email });
+        if (usuarioExistente) {
+            return res.status(409).json({ mensaje: 'Error: El correo ingresado ya está registrado.' });
         }
 
-        const saltRounds = 10;
-        const passwordHasheada = await bcrypt.hash(password, saltRounds);
+        const passwordHasheada = await bcrypt.hash(password, 10);
 
-        const queryInsertar = 'INSERT INTO Usuarios (nombre_completo, email, password) VALUES (?, ?, ?)';
-        const valores = [nombre, email, passwordHasheada];
-        
-        const [resultado] = await db.query(queryInsertar, valores);
+        // Crear y guardar la instancia del usuario
+        const nuevoUsuario = new Usuario({
+            nombre_completo: nombre,
+            email,
+            password: passwordHasheada,
+            perfil_academico,
+            preferencias_convivencia,
+            intereses
+        });
+
+        await nuevoUsuario.save();
 
         return res.status(201).json({
             mensaje: 'Usuario registrado exitosamente.',
-            idNuevoUsuario: resultado.insertId
+            idNuevoUsuario: nuevoUsuario._id
         });
 
     } catch (error) {
+        // Error de validación de Mongoose
+        if (error.name === "ValidationError") {
+            return res.status(400).json({ mensaje: "Error de validación (campos incompletos o inválidos)", detalles: error.message });
+        }
+        // Error de duplicado de clave única (correo)
+        if (error.code === 11000) {
+            return res.status(409).json({ mensaje: 'Error: El correo ingresado ya está registrado.' });
+        }
         console.error('Error en el registro:', error);
-        return res.status(500).json({ 
-            mensaje: 'Error interno del servidor al intentar registrar el usuario.' 
-        });
+        return res.status(500).json({ mensaje: 'Error interno del servidor.' });
     }
 };
 
 const loginUsuario = async (req, res) => {
-    const email = req.body.email;
-    const password = req.body.password;
-
-    // Validación de que vengan los datos
-    if (!email || !password) {
-        return res.status(400).json({
-            mensaje: 'Error: El correo y la contraseña son obligatorios para ingresar.'
-        });
-    }
+    const { email, password } = req.body;
 
     try {
-        // 1. Buscamos si el correo existe
-        const queryBuscar = 'SELECT * FROM Usuarios WHERE email = ?';
-        const [usuarios] = await db.query(queryBuscar, [email]);
-
-        if (usuarios.length === 0) {
-            return res.status(404).json({
-                mensaje: 'Error: Usuario no encontrado.'
-            });
+        // Incluimos explícitamente la contraseña en la búsqueda
+        const usuario = await Usuario.findOne({ email }).select('+password');
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Error: Usuario no encontrado.' });
         }
 
-        // Asignamos el usuario encontrado a una variable explícita
-        const usuarioEncontrado = usuarios[0];
-
-        // 2. Comparamos la contraseña plana con la encriptada
-        const passwordValida = await bcrypt.compare(password, usuarioEncontrado.password);
-
+        const passwordValida = await bcrypt.compare(password, usuario.password);
         if (!passwordValida) {
-            return res.status(401).json({
-                mensaje: 'Error: Contraseña incorrecta.'
-            });
+            return res.status(401).json({ mensaje: 'Error: Contraseña incorrecta.' });
         }
 
-        // 3. Generamos el "Carnet Virtual" (JWT)
-        const payload = {
-            id_usuario: usuarioEncontrado.id_usuario,
-            rol: usuarioEncontrado.rol
-        };
-        
-        // En un entorno de producción, esto iría en un archivo .env
-        const firmaSecreta = 'llave_super_secreta_123'; 
-        const token = jwt.sign(payload, firmaSecreta, { expiresIn: '2h' });
+        const token = jwt.sign(
+            { id: usuario._id, rol: usuario.rol }, 
+            process.env.JWT_SECRET || 'llave_super_secreta_123', 
+            { expiresIn: '2h' }
+        );
 
-        return res.status(200).json({
-            mensaje: '¡Inicio de sesión exitoso!',
-            token: token
-        });
+        return res.status(200).json({ mensaje: '¡Inicio de sesión exitoso!', token });
 
     } catch (error) {
         console.error('Error en el login:', error);
-        return res.status(500).json({
-            mensaje: 'Error interno del servidor al intentar iniciar sesión.'
-        });
+        return res.status(500).json({ mensaje: 'Error interno del servidor.' });
     }
 };
 
-module.exports = { 
-    registrarUsuario,
-    loginUsuario // No olvides exportarla
-};
+module.exports = { registrarUsuario, loginUsuario };

@@ -1,0 +1,81 @@
+const mongoose = require('mongoose');
+
+const perfilAcademicoSchema = new mongoose.Schema({
+  universidad: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  carrera: {
+    type: String,
+    required: true,
+    trim: true,
+  }
+}, { _id: false });
+
+const preferenciasConvivenciaSchema = new mongoose.Schema({
+  fuma: {
+    type: Boolean,
+    default: false
+  },
+  mascotas: {
+    type: Boolean,
+    default: false
+  },
+  nivel_orden: {
+    type: Number,
+    min: 1,
+    max: 5,
+    required: true
+  },
+  // Puedes agregar más campos según necesidades
+}, { _id: false });
+
+const usuarioSchema = new mongoose.Schema({
+  nombre_completo: {
+    type: String,
+    required: [true, "El nombre completo es obligatorio"],
+    trim: true
+  },
+  email: {
+    type: String,
+    required: [true, "El email es obligatorio"],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    match: [/.+@.+\..+/, "Correo electrónico no válido"]
+  },
+  password: {
+    type: String,
+    required: [true, "La contraseña es obligatoria"],
+    trim: true,
+    minlength: [8, "La contraseña debe tener al menos 8 caracteres"],
+    select: false
+  },
+  perfil_academico: {
+    type: perfilAcademicoSchema,
+    required: true
+  },
+  preferencias_convivencia: {
+    type: preferenciasConvivenciaSchema,
+    required: true
+  },
+  intereses: {
+    type: [String],
+    validate: {
+      validator: function(arr) {
+        return Array.isArray(arr) && arr.length <= 5;
+      },
+      message: "Máximo 5 intereses permitidos"
+    },
+    default: []
+  },
+  rol: {
+    type: String,
+    enum: ['Buscador', 'Anfitrion'],
+    default: 'Buscador',
+    required: true
+  }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Usuario', usuarioSchema);

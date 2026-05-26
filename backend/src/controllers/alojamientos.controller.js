@@ -1,4 +1,4 @@
-const db = require('../db/connection'); 
+const Alojamientos = require('../models/Alojamientos');
 
 const crearAlojamiento = async (req, res) => {
     // Extraemos el ID directamente del token (el middleware verificarToken lo puso aquí)

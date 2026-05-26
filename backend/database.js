@@ -1,14 +1,15 @@
-const mariadb = require('mariadb');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
-// Creamos el "equipo de meseros" (Pool)
-const pool = mariadb.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-    connectionLimit: 5 // Límite de conexiones simultáneas
-});
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    console.log(`🔥 MongoDB Conectado: ${conn.connection.host}`);
+  } catch (error) {
+    console.error(`❌ Error de conexión a MongoDB: ${error.message}`);
+    process.exit(1); 
+  }
+};
 
-module.exports = pool;
+// Exportación en formato CommonJS
+module.exports = { connectDB };

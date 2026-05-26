@@ -1,141 +1,183 @@
-const db = require('../db/connection');
+const mongoose = require('mongoose');
+const Solicitud = require('../models/Solicitud');
+const Alojamiento = require('../models/Alojamiento');
+
+const obtenerIdDesdeToken = (req) =>
+    req.usuario?.id ?? req.usuario?.id_usuario;
+
+const mapEstadoEntrada = (estado) => {
+    const normalizado = String(estado).toLowerCase();
+    if (normalizado === 'aceptada' || normalizado === 'aceptado') return 'Aceptado';
+    if (normalizado === 'rechazada' || normalizado === 'rechazado') return 'Rechazado';
+    if (normalizado === 'pendiente') return 'Pendiente';
+    return null;
+};
+
+const resolverUsuarioObjetivo = async (body) => {
+    const { id_usuario_objetivo, id_alojamiento } = body;
+
+    if (id_usuario_objetivo) {
+        if (!mongoose.Types.ObjectId.isValid(id_usuario_objetivo)) {
+            return { error: 'id_usuario_objetivo inválido' };
+        }
+        return { id_usuario_objetivo };
+    }
+
+    if (id_alojamiento) {
+        if (!mongoose.Types.ObjectId.isValid(id_alojamiento)) {
+            return { error: 'id_alojamiento inválido' };
+        }
+        const alojamiento = await Alojamiento.findById(id_alojamiento).select('id_anfitrion');
+        if (!alojamiento) {
+            return { error: 'Alojamiento no encontrado' };
+        }
+        return { id_usuario_objetivo: alojamiento.id_anfitrion };
+    }
+
+    return { error: 'Debes enviar id_usuario_objetivo o id_alojamiento' };
+};
 
 const enviarSolicitud = async (req, res) => {
-    // El ID del usuario que postula lo sacamos de su "Carnet Virtual" (Token)
-    const id_usuario = req.usuario.id_usuario;
-    
-    // Declaración explícita de los datos que vienen del frontend
-    const id_alojamiento = req.body.id_alojamiento;
-    const mensaje = req.body.mensaje;
+    const id_usuario_interesado = obtenerIdDesdeToken(req);
 
-    // Validación de datos obligatorios
-    if (!id_alojamiento) {
-        return res.status(400).json({
-            mensaje: 'Error: Debes especificar a qué alojamiento estás postulando.'
-        });
+    if (!id_usuario_interesado || !mongoose.Types.ObjectId.isValid(id_usuario_interesado)) {
+        return res.status(401).json({ mensaje: 'Token inválido o usuario no identificado.' });
     }
 
     try {
-        // Primero, verificamos si el usuario ya envió una solicitud a este lugar
-        const queryVerificar = `
-            SELECT * FROM Solicitudes 
-            WHERE id_usuario = ? AND id_alojamiento = ?
-        `;
-        const [solicitudesPrevias] = await db.query(queryVerificar, [id_usuario, id_alojamiento]);
+        const resuelto = await resolverUsuarioObjetivo(req.body);
+        if (resuelto.error) {
+            return res.status(400).json({ mensaje: `Error: ${resuelto.error}` });
+        }
 
-        if (solicitudesPrevias.length > 0) {
-            return res.status(409).json({
-                mensaje: 'Error: Ya has enviado una solicitud para este alojamiento.'
+        const { id_usuario_objetivo } = resuelto;
+
+        if (String(id_usuario_interesado) === String(id_usuario_objetivo)) {
+            return res.status(400).json({
+                mensaje: 'Error: No puedes enviarte una solicitud a ti mismo.',
             });
         }
 
-        // Si no hay solicitudes previas, la insertamos
-        const queryInsertar = `
-            INSERT INTO Solicitudes (id_usuario, id_alojamiento, mensaje) 
-            VALUES (?, ?, ?)
-        `;
-        const valores = [id_usuario, id_alojamiento, mensaje];
+        const solicitudPrevia = await Solicitud.findOne({
+            id_usuario_interesado,
+            id_usuario_objetivo,
+        });
 
-        const [resultado] = await db.query(queryInsertar, valores);
+        if (solicitudPrevia) {
+            return res.status(409).json({
+                mensaje: 'Error: Ya has enviado una solicitud a este usuario.',
+            });
+        }
+
+        const nuevaSolicitud = await Solicitud.create({
+            id_usuario_interesado,
+            id_usuario_objetivo,
+            estado: 'Pendiente',
+        });
 
         return res.status(201).json({
             exito: true,
-            mensaje: '¡Solicitud enviada al anfitrión correctamente en Roomeet!',
-            id_solicitud: resultado.insertId
+            mensaje: '¡Solicitud enviada correctamente en Roomeet!',
+            id_solicitud: nuevaSolicitud._id,
         });
-
     } catch (error) {
         console.error('Error al enviar la solicitud:', error);
         return res.status(500).json({
-            mensaje: 'Error interno del servidor al procesar tu solicitud.'
+            mensaje: 'Error interno del servidor al procesar tu solicitud.',
         });
     }
 };
 
 const obtenerMisSolicitudes = async (req, res) => {
-    // El ID del anfitrión lo sacamos de su token
-    const id_anfitrion = req.usuario.id_usuario;
+    const id_usuario_objetivo = obtenerIdDesdeToken(req);
+
+    if (!id_usuario_objetivo || !mongoose.Types.ObjectId.isValid(id_usuario_objetivo)) {
+        return res.status(401).json({ mensaje: 'Token inválido o usuario no identificado.' });
+    }
 
     try {
-        // Hacemos JOIN para traer los datos útiles (quién postula y a qué lugar)
-        const query = `
-            SELECT s.id_solicitud, s.estado, s.mensaje, s.fecha_solicitud,
-                   a.titulo AS alojamiento,
-                   u.nombre_completo AS postulante, u.email AS contacto_postulante
-            FROM Solicitudes s
-            INNER JOIN Alojamientos a ON s.id_alojamiento = a.id_alojamiento
-            INNER JOIN Usuarios u ON s.id_usuario = u.id_usuario
-            WHERE a.id_anfitrion = ?
-            ORDER BY s.fecha_solicitud DESC
-        `;
-        
-        const [solicitudes] = await db.query(query, [id_anfitrion]);
+        const solicitudes = await Solicitud.find({ id_usuario_objetivo })
+            .populate('id_usuario_interesado', 'nombre_completo email perfil_academico')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const data = solicitudes.map((s) => ({
+            id_solicitud: s._id,
+            estado: s.estado,
+            fecha_solicitud: s.createdAt,
+            postulante: s.id_usuario_interesado?.nombre_completo ?? null,
+            contacto_postulante: s.id_usuario_interesado?.email ?? null,
+            universidad_postulante: s.id_usuario_interesado?.perfil_academico?.universidad ?? null,
+            carrera_postulante: s.id_usuario_interesado?.perfil_academico?.carrera ?? null,
+        }));
 
         return res.status(200).json({
             exito: true,
-            data: solicitudes
+            data,
         });
-
     } catch (error) {
         console.error('Error al obtener solicitudes:', error);
         return res.status(500).json({
-            mensaje: 'Error interno al consultar las solicitudes recibidas.'
+            mensaje: 'Error interno al consultar las solicitudes recibidas.',
         });
     }
 };
 
 const responderSolicitud = async (req, res) => {
-    // Declaración explícita de variables
-    const id_solicitud = req.params.id;
-    const nuevo_estado = req.body.estado; // Aquí vendrá 'aceptada' o 'rechazada'
+    const { id } = req.params;
+    const nuevo_estado = req.body.estado;
 
     if (!nuevo_estado) {
         return res.status(400).json({
-            mensaje: 'Error: Debes enviar el nuevo estado de la solicitud (aceptada o rechazada).'
+            mensaje: 'Error: Debes enviar el nuevo estado de la solicitud (aceptada o rechazada).',
         });
     }
 
-    try {
-        // 1. Actualizamos el estado de la solicitud a 'aceptada' o 'rechazada'
-        const queryUpdate = 'UPDATE Solicitudes SET estado = ? WHERE id_solicitud = ?';
-        const [resultado] = await db.query(queryUpdate, [nuevo_estado, id_solicitud]);
+    const estadoMapeado = mapEstadoEntrada(nuevo_estado);
+    if (!estadoMapeado || estadoMapeado === 'Pendiente') {
+        return res.status(400).json({
+            mensaje: 'Error: Estado inválido. Usa aceptada o rechazada.',
+        });
+    }
 
-        if (resultado.affectedRows === 0) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ mensaje: 'Error: ID de solicitud inválido.' });
+    }
+
+    const idAnfitrion = obtenerIdDesdeToken(req);
+
+    try {
+        const solicitud = await Solicitud.findById(id);
+
+        if (!solicitud) {
             return res.status(404).json({
-                mensaje: 'Error: La solicitud que intentas responder no existe.'
+                mensaje: 'Error: La solicitud que intentas responder no existe.',
             });
         }
 
-        // 2. LA MAGIA: Si el anfitrión aceptó, restamos 1 cupo al alojamiento
-        if (nuevo_estado === 'aceptada') {
-            
-            // Primero, descubrimos a qué alojamiento corresponde esta solicitud
-            const queryBuscarAlojamiento = 'SELECT id_alojamiento FROM Solicitudes WHERE id_solicitud = ?';
-            const [solicitudInfo] = await db.query(queryBuscarAlojamiento, [id_solicitud]);
-
-            if (solicitudInfo.length > 0) {
-                const id_alojamiento = solicitudInfo[0].id_alojamiento;
-
-                // Actualizamos restando 1, asegurándonos de que no baje de cero
-                const queryRestarCupo = `
-                    UPDATE Alojamientos 
-                    SET cupos_disponibles = cupos_disponibles - 1 
-                    WHERE id_alojamiento = ? AND cupos_disponibles > 0
-                `;
-                
-                await db.query(queryRestarCupo, [id_alojamiento]);
-            }
+        if (String(solicitud.id_usuario_objetivo) !== String(idAnfitrion)) {
+            return res.status(403).json({
+                mensaje: 'Error: No tienes permiso para responder esta solicitud.',
+            });
         }
+
+        solicitud.estado = estadoMapeado;
+        await solicitud.save();
 
         return res.status(200).json({
             exito: true,
-            mensaje: `¡La solicitud ha sido marcada como ${nuevo_estado} en Roomeet!`
+            mensaje: `¡La solicitud ha sido marcada como ${estadoMapeado} en Roomeet!`,
         });
-
     } catch (error) {
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                mensaje: 'Estado de solicitud inválido.',
+                detalles: error.message,
+            });
+        }
         console.error('Error al responder solicitud:', error);
         return res.status(500).json({
-            mensaje: 'Error interno al intentar actualizar la solicitud.'
+            mensaje: 'Error interno al intentar actualizar la solicitud.',
         });
     }
 };
@@ -143,5 +185,5 @@ const responderSolicitud = async (req, res) => {
 module.exports = {
     enviarSolicitud,
     obtenerMisSolicitudes,
-    responderSolicitud
+    responderSolicitud,
 };
