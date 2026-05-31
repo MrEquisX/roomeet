@@ -1,19 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = 'http://localhost:3000';
+
+let socket;
 
 const Conversacion = () => {
-  const { id } = useParams(); 
-  
-  // Referencias para inputs ocultos (Magia para abrir cámara/galería)
+  const { id } = useParams();
+
+  // Referencias para inputs ocultos
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const mensajesEndRef = useRef(null);
 
   // Estados
+  const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [grabandoAudio, setGrabandoAudio] = useState(false);
-  
-  // Datos simulados del contacto
+
+  // Datos simulados del contacto (puedes reemplazar luego por info real si es necesario)
   const contacto = { 
     id: id || "1",
     nombre: "Sarah Chen", 
@@ -22,44 +28,97 @@ const Conversacion = () => {
     gradiente: "from-indigo-400 to-purple-600",
     enLinea: true
   };
-  
-  // Memoria temporal de los mensajes (Ahora soporta multimedia)
-  const [mensajes, setMensajes] = useState([
-    { id: 1, tipo: 'texto', texto: "¡Hola! Vi que también buscas pieza cerca de la PUCV.", remitente: "Sarah", hora: "10:30" },
-    { id: 2, tipo: 'texto', texto: "¡Hola! Sí, estoy buscando algo tranquilo para este semestre.", remitente: "yo", hora: "10:32" },
-    { id: 3, tipo: 'texto', texto: "Genial. Mi depto es súper relajado y no hacemos ruido de noche. ¿Te tinca si hablamos los detalles?", remitente: "Sarah", hora: "10:35" }
-  ]);
 
-  // Auto-scroll al último mensaje
-  const scrollToBottom = () => {
+  // Obtener mensajes de la conversación desde el backend al cargar
+  useEffect(() => {
+    const fetchMensajes = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`http://localhost:3000/api/chats/${id}/mensajes`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!res.ok) throw new Error('No se pudieron cargar los mensajes');
+        const data = await res.json();
+        setMensajes(data); // Asegúrate de que data sea un array de mensajes
+      } catch (err) {
+        setMensajes([]);
+      }
+    };
+    if (id) fetchMensajes();
+  }, [id]);
+
+  // Integración Socket.IO
+  useEffect(() => {
+    if (!id) return;
+    // 2) Crear la conexión
+    socket = io(SOCKET_URL, {
+      // Puedes agregar opciones si usas autenticación
+    });
+
+    // 3) Unirse al chat específico
+    socket.emit('joinChat', id);
+
+    // 4) Escuchar eventos de nuevos mensajes
+    socket.on('nuevoMensaje', (mensajeRecibido) => {
+      setMensajes(prev => [...prev, mensajeRecibido]);
+    });
+
+    return () => {
+      // Limpia la conexión al desmontar
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [id]);
+
+  // 6. Scroll automático cuando llegan mensajes nuevos
+  useEffect(() => {
     mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-  useEffect(() => { scrollToBottom(); }, [mensajes]);
+  }, [mensajes]);
 
-  // ENVIAR TEXTO
-  const enviarMensaje = (e) => {
+  // 5) Enviar mensaje de texto al backend + notificar vía socket
+  const enviarMensaje = async (e) => {
     e.preventDefault();
     if (!nuevoMensaje.trim()) return;
 
-    setMensajes([...mensajes, {
-      id: Date.now(),
-      tipo: 'texto',
-      texto: nuevoMensaje,
-      remitente: "yo",
-      hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }]);
-    setNuevoMensaje('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://localhost:3000/api/chats/${id}/mensajes`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ texto: nuevoMensaje })
+      });
+
+      if (res.status === 201) {
+        const nuevo = await res.json();
+
+        setMensajes((msgs) => [...msgs, nuevo]);
+        setNuevoMensaje('');
+
+        // Emitir el mensaje por socket
+        if (socket && socket.connected) {
+          socket.emit('enviarMensaje', { chatId: id, mensaje: nuevo });
+        }
+      }
+    } catch (err) {
+      // Error al enviar, manejo opcional
+    }
   };
 
-  // ENVIAR ARCHIVO / FOTO (Procesa el archivo real subido)
+  // ENVIAR ARCHIVO / FOTO (sigue local porque backend no está especificado)
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Creamos una URL temporal para mostrar la imagen inmediatamente en el chat
     const imageUrl = URL.createObjectURL(file);
 
-    setMensajes([...mensajes, {
+    setMensajes(prev => [...prev, {
       id: Date.now(),
       tipo: 'imagen',
       url: imageUrl,
@@ -71,8 +130,7 @@ const Conversacion = () => {
   // SIMULAR AUDIO
   const handleAudioToggle = () => {
     if (grabandoAudio) {
-      // Termina de grabar y "envía" el audio
-      setMensajes([...mensajes, {
+      setMensajes(prev => [...prev, {
         id: Date.now(),
         tipo: 'audio',
         duracion: "0:04",
@@ -85,7 +143,7 @@ const Conversacion = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans relative">
-      
+
       {/* HEADER DEL CHAT */}
       <div className="bg-white px-4 py-3 shadow-sm flex items-center gap-3 z-10 sticky top-0 border-b border-gray-100">
         <Link to="/chats" className="text-gray-400 hover:text-blue-600 p-2 -ml-2 transition-colors rounded-full hover:bg-gray-50">
@@ -122,7 +180,6 @@ const Conversacion = () => {
 
         {mensajes.map((msg) => (
           <div key={msg.id} className={`flex ${msg.remitente === 'yo' ? 'justify-end' : 'justify-start'}`}>
-            
             <div className={`max-w-[80%] px-4 py-2.5 shadow-sm ${
               msg.remitente === 'yo' 
                 ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm' 
@@ -164,14 +221,11 @@ const Conversacion = () => {
 
       {/* INPUTS OCULTOS PARA ARCHIVOS Y CÁMARA */}
       <input type="file" accept="image/*, .pdf, .doc" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
-      {/* El atributo capture="environment" fuerza a abrir la cámara trasera en el celular */}
       <input type="file" accept="image/*" capture="environment" ref={cameraInputRef} onChange={handleFileSelect} className="hidden" />
 
       {/* BARRA PARA ESCRIBIR MULTIMEDIA */}
       <div className="absolute bottom-0 w-full bg-white border-t border-gray-100 p-4 pb-safe z-20 shadow-[0_-4px_20px_-15px_rgba(0,0,0,0.1)]">
-        
         {grabandoAudio ? (
-          // INTERFAZ DE GRABANDO AUDIO
           <div className="flex items-center justify-between bg-red-50 text-red-600 px-5 py-3 rounded-full border border-red-100 animate-pulse">
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 bg-red-600 rounded-full"></div>
@@ -182,9 +236,7 @@ const Conversacion = () => {
             </button>
           </div>
         ) : (
-          // INTERFAZ NORMAL DE CHAT
           <form onSubmit={enviarMensaje} className="flex gap-2 items-center">
-            
             {/* 1. Botón Adjuntar Galería/Documentos */}
             <button type="button" onClick={() => fileInputRef.current.click()} className="p-2 text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0 active:scale-95">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
@@ -200,13 +252,13 @@ const Conversacion = () => {
                 className="w-full bg-gray-50 border border-gray-200 text-sm font-medium pl-5 pr-12 py-3.5 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-800"
               />
               
-              {/* 2. Botón Cámara (Dentro del input a la derecha) */}
+              {/* 2. Botón Cámara */}
               <button type="button" onClick={() => cameraInputRef.current.click()} className="absolute right-3 text-gray-400 hover:text-blue-600 p-1 transition-colors active:scale-95">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812-1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               </button>
             </div>
             
-            {/* 3. Botón Dinámico: Enviar (Si hay texto) o Micrófono (Si está vacío) */}
+            {/* 3. Botón Dinámico */}
             {nuevoMensaje.trim() ? (
               <button type="submit" className="w-12 h-12 rounded-full flex items-center justify-center bg-blue-600 text-white shadow-md hover:bg-blue-700 hover:shadow-lg active:scale-95 transition-all flex-shrink-0">
                 <svg className="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
@@ -219,7 +271,6 @@ const Conversacion = () => {
           </form>
         )}
       </div>
-
     </div>
   );
 };

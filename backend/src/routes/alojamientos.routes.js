@@ -14,11 +14,27 @@ const upload = require('../middlewares/subirFoto');
 router.get('/', alojamientosController.obtenerAlojamientos);
 
 // Ruta protegida: Solo usuarios con token válido pueden publicar
-// Añadimos upload.single('foto_alojamiento') justo después del token
+// Cambiamos a upload.array('imagenes', 5) para permitir múltiples imágenes
 router.post(
-    '/', 
-    verificarToken, 
-    upload.single('foto_alojamiento'), 
+    '/',
+    verificarToken,
+    upload.array('imagenes', 5),
+    // Middleware intermedio para adaptar req.files para el controlador
+    async (req, res, next) => {
+        try {
+            // Mapear a un array de rutas/urls relativas (ajustar según lo que uses para guardado)
+            if (req.files && Array.isArray(req.files)) {
+                // Por ejemplo, almacenar la ruta relativa o URL de cada imagen
+                req.body.imagenes = req.files.map(file => file.path || file.location || file.filename);
+            } else {
+                req.body.imagenes = [];
+            }
+            // Pasamos al controlador
+            next();
+        } catch (error) {
+            res.status(400).json({ error: 'Error procesando imágenes.' });
+        }
+    },
     alojamientosController.crearAlojamiento
 );
 

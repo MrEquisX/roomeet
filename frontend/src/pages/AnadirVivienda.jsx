@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
+import { apiClient } from '../services/apiClient'; // NUEVO: importar apiClient
 
 // 1. CONFIGURACIÓN DEL MAPA
 const customIcon = new Icon({
@@ -39,10 +40,11 @@ const MapRecenter = ({ lat, lng }) => {
 const AnadirVivienda = () => {
   const navigate = useNavigate();
   const [mostrarExito, setMostrarExito] = useState(false);
+  const [mensajeExito, setMensajeExito] = useState('');
   const [errorServidor, setErrorServidor] = useState(null);
 
-  // ESTADO DINÁMICO DEL ALOJAMIENTO
-  const [datos, setDatos] = useState({
+  // Estado inicial que se puede reutilizar para limpiar el formulario tras éxito
+  const datosIniciales = {
     titulo: '',
     descripcion: '',
     tipoPropiedad: 'Departamento',
@@ -59,12 +61,14 @@ const AnadirVivienda = () => {
       { id: 1, precio: '', tipoBano: 'Público/Compartido (Fuera de la pieza)' }
     ],
     caracteristicas: []
-  });
+  };
+
+  const [datos, setDatos] = useState(datosIniciales);
 
   const [imagenes, setImagenes] = useState([]);
   const [buscandoGPS, setBuscandoGPS] = useState(false);
 
-  // CATÁLOGO EXPANDIDO Y CATEGORIZADO (Tipo Airbnb)
+  // CATEGORÍAS
   const categoriasServicios = [
     {
       categoria: "Básicos & Estudio",
@@ -160,7 +164,10 @@ const AnadirVivienda = () => {
   };
 
   const obtenerUbicacionGPS = () => {
-    if (!navigator.geolocation) return alert('La geolocalización no está soportada.');
+    if (!navigator.geolocation) {
+      setErrorServidor('La geolocalización no está soportada.');
+      return;
+    }
     setBuscandoGPS(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -168,39 +175,35 @@ const AnadirVivienda = () => {
         setBuscandoGPS(false);
       },
       (error) => {
-        console.error('Error GPS:', error);
         setBuscandoGPS(false);
-        alert('No se pudo acceder al GPS. Selecciona en el mapa manualmente.');
+        setErrorServidor('No se pudo acceder al GPS. Selecciona en el mapa manualmente.');
       },
       { enableHighAccuracy: true, timeout: 6000 }
     );
   };
 
+  const limpiarFormulario = () => {
+    setDatos(datosIniciales);
+    setImagenes([]);
+  };
+
+  // NUEVO handleSubmit refactorizado a apiClient -------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorServidor(null);
+    setMensajeExito('');
 
-    // 1. Capturar todos los campos ya está resuelto en el estado datos
-    // 2. Extraer token de localStorage
+    // Validar sesión activa
     const token = localStorage.getItem('token');
     if (!token) {
-      setErrorServidor("No tienes sesión activa, inicia sesión para publicar.");
+      setErrorServidor('No tienes sesión activa, inicia sesión para publicar.');
       return;
     }
 
-    // 3. Elegir si se usan archivos (imagenes) -> FormData || JSON
-    let url = "http://localhost:3000/api/alojamientos";
-    let config = {
-      method: "POST",
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      }
-    };
-    let body;
-
     try {
+      let resultado = null;
       if (imagenes.length > 0) {
-        // Usar FormData para imágenes + datos
+        // Armar FormData
         const formData = new FormData();
         formData.append('titulo', datos.titulo);
         formData.append('descripcion', datos.descripcion);
@@ -214,58 +217,43 @@ const AnadirVivienda = () => {
         formData.append('habitacionesTotales', datos.habitacionesTotales);
         formData.append('habitantesActuales', datos.habitantesActuales);
         formData.append('habitacionesDisponibles', datos.habitacionesDisponibles);
-
-        // habitacionesOfrecidas (array de objetos), lo puedes serializar tipo json string
         formData.append('habitacionesOfrecidas', JSON.stringify(datos.habitacionesOfrecidas));
-        // caracteristicas (array)
         formData.append('caracteristicas', JSON.stringify(datos.caracteristicas));
-        // imágenes:
-        imagenes.forEach((archivo, i) => {
+        imagenes.forEach((archivo) => {
           formData.append('imagenes', archivo);
         });
 
-        body = formData;
-        delete config.headers['Content-Type'];
-        config.body = body;
+        resultado = await apiClient.post('/alojamientos', formData);
       } else {
-        // Enviar JSON plano
-        config.headers['Content-Type'] = 'application/json';
-        body = {
+        // Payload JSON estándar
+        const payload = {
           ...datos,
           habitacionesOfrecidas: datos.habitacionesOfrecidas,
           caracteristicas: datos.caracteristicas
         };
-        config.body = JSON.stringify(body);
+        resultado = await apiClient.post('/alojamientos', payload);
       }
 
-      // 4. Enviar petición POST
-      const resp = await fetch(url, config);
-
-      if (resp.status === 201) {
-        setMostrarExito(true);
-        setTimeout(() => {
-          setMostrarExito(false);
-          navigate("/");
-        }, 2250);
-      } else {
-        // manejar distintos errores
-        let mensajeBackend = "Error al guardar el alojamiento";
-        try {
-          const problemas = await resp.json();
-          if (typeof problemas?.error === "string") {
-            mensajeBackend = problemas.error;
-          } else if (problemas?.message) {
-            mensajeBackend = problemas.message;
-          } else if (typeof problemas === "string") {
-            mensajeBackend = problemas;
-          }
-        } catch (e) {}
-        setErrorServidor(mensajeBackend);
+      // Si no arroja error, éxito:
+      limpiarFormulario();
+      setMensajeExito('¡Vivienda publicada exitosamente!');
+      setMostrarExito(true);
+      setTimeout(() => {
+        setMostrarExito(false);
+        navigate('/dashboard');
+      }, 2000);
+    } catch (error) {
+      // Intentar mostrar mensaje backend si existe
+      let mensajeBackend = 'Error al guardar el alojamiento';
+      if (typeof error?.message === 'string') {
+        mensajeBackend = error.message;
+      } else if (typeof error === 'string') {
+        mensajeBackend = error;
       }
-    } catch (err) {
-      setErrorServidor("Error de red al conectar al servidor. Intenta luego.");
+      setErrorServidor(mensajeBackend);
     }
   };
+  // ----------------------------------------------------------------
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10 px-4 font-sans justify-center relative">
@@ -518,14 +506,15 @@ const AnadirVivienda = () => {
             <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-200">
               <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">¡Vivienda Publicada!</h2>
-            <p className="text-sm text-gray-500 text-center mb-8 px-4">Tu espacio ya es visible en el buscador de Roomeet. Prepárate para recibir mensajes.</p>
-            <button onClick={() => navigate('/')} className="w-full max-w-xs bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-md hover:bg-black transition-all">
-              Ir al Inicio
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">{mensajeExito || '¡Vivienda Publicada!'}</h2>
+            <p className="text-sm text-gray-500 text-center mb-8 px-4">
+              Tu espacio ya es visible en el buscador de Roomeet. Prepárate para recibir mensajes.
+            </p>
+            <button onClick={() => navigate('/dashboard')} className="w-full max-w-xs bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-md hover:bg-black transition-all">
+              Ir al Panel
             </button>
           </div>
         )}
-
       </div>
     </div>
   );

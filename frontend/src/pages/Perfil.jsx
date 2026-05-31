@@ -1,45 +1,86 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const Perfil = () => {
   const navigate = useNavigate();
   const [mostrarModalVivienda, setMostrarModalVivienda] = useState(false);
+  const [usuario, setUsuario] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
-  // Datos simulados (Espejo exacto de las nuevas tablas de MariaDB)
-  const usuario = {
-    nombre: "André",
-    apellido: "Limari",
-    carrera: "Ing. en Informática",
-    universidad: "PUCV",
-    sede: "Campus Curauma",
-    bio: "Busco compañeros tranquilos que respeten los horarios de estudio. Me gusta armar PCs los fines de semana y entrenar.",
-    filtros: {
-      soloMismaUniversidad: true,
-      soloMismaCarrera: false,
-      generoPreferido: "Mixto"
-    },
-    preferencias: {
-      fuma: false,
-      mascotas: true,
-      bebeAlcohol: "Socialmente",
-      tipoDieta: "Omnívoro",
-      visitasFrecuentes: false,
-      aceptaParejasVisita: false,
-      horarioPreferido: "Diurno",
-      orden: 4, 
-      ruido: 2  
-    },
-    intereses: [
-      { nombre: 'Fútbol', icono: '⚽' },
-      { nombre: 'Hardware & Gaming', icono: '💻' },
-      { nombre: 'Entrenamiento en Casa', icono: '💪' }
-    ]
-  };
+  useEffect(() => {
+    const fetchPerfil = async () => {
+      setCargando(true);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          navigate('/login');
+          return;
+        }
+        const res = await fetch('http://localhost:3000/api/usuarios/mi-perfil', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (res.status === 401) {
+          navigate('/login');
+          return;
+        }
+        const data = await res.json();
+        setUsuario(data);
+      } catch (error) {
+        console.error(error);
+        setUsuario(null);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    fetchPerfil();
+    // eslint-disable-next-line
+  }, []);
 
   const confirmarAñadirVivienda = () => {
     setMostrarModalVivienda(false);
     navigate('/anadir-vivienda');
   };
+
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-dashed rounded-full animate-spin mb-6"></div>
+        <span className="text-blue-800 font-bold text-lg">Cargando perfil...</span>
+      </div>
+    );
+  }
+
+  if (!usuario) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center text-gray-500">
+        <span>Hubo un error al cargar el perfil.</span>
+        <button
+          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold"
+          onClick={() => window.location.reload()}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  // Utilidades para campos que podrían faltar:
+  const nombre = usuario.nombre || '';
+  const apellido = usuario.apellido || '';
+  const carrera = usuario.carrera || usuario.carreraProfesional || '';
+  const universidad = usuario.universidad || '';
+  const sede = usuario.sede || '';
+  const telefono = usuario.telefono || '';
+  const correo = usuario.email || usuario.correo || '';
+  const bio = usuario.bio || usuario.biografia || '';
+  const filtros = usuario.filtros || {};
+  const preferencias = usuario.preferencias || {};
+  const intereses = usuario.intereses || [];
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative">
@@ -48,8 +89,8 @@ const Perfil = () => {
       <div className="bg-blue-600 h-32 rounded-b-[3rem] w-full relative shadow-sm">
         <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
           <div className="w-28 h-28 bg-white rounded-3xl shadow-lg p-1">
-            <div className="w-full h-full bg-gray-800 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold">
-              {usuario.nombre[0]}
+            <div className="w-full h-full bg-gray-800 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold select-none uppercase">
+              {nombre && nombre[0]}
             </div>
           </div>
         </div>
@@ -57,10 +98,12 @@ const Perfil = () => {
 
       {/* INFO BÁSICA Y BOTONES */}
       <div className="mt-16 text-center px-6">
-        <h1 className="text-2xl font-bold text-blue-900">{usuario.nombre} {usuario.apellido}</h1>
-        <p className="text-gray-500 text-sm mt-1">{usuario.carrera}</p>
-        <p className="text-blue-600 font-bold text-xs mt-0.5">{usuario.universidad} - {usuario.sede}</p>
-        
+        <h1 className="text-2xl font-bold text-blue-900">{nombre} {apellido}</h1>
+        <p className="text-gray-500 text-sm mt-1">{carrera}</p>
+        <p className="text-blue-600 font-bold text-xs mt-0.5">{universidad} {sede ? `- ${sede}` : ''}</p>
+        <p className="text-gray-400 text-xs mt-1">{correo}</p>
+        {telefono && <p className="text-gray-400 text-xs">{telefono}</p>}
+
         <div className="grid grid-cols-2 gap-3 mt-6">
           <Link 
             to="/editar-perfil" 
@@ -83,16 +126,16 @@ const Perfil = () => {
       <div className="p-6 space-y-5">
         
         {/* FILTROS EXCLUYENTES */}
-        {(usuario.filtros.soloMismaUniversidad || usuario.filtros.soloMismaCarrera || usuario.filtros.generoPreferido !== 'Indiferente') && (
+        {(filtros.soloMismaUniversidad || filtros.soloMismaCarrera || (filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente')) && (
           <div className="flex flex-wrap gap-2 justify-center">
-            {usuario.filtros.soloMismaUniversidad && (
+            {filtros.soloMismaUniversidad && (
               <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">🎓 Solo mi U</span>
             )}
-            {usuario.filtros.soloMismaCarrera && (
+            {filtros.soloMismaCarrera && (
               <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">📚 Solo mi Carrera</span>
             )}
-            {usuario.filtros.generoPreferido !== 'Indiferente' && (
-              <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">👤 {usuario.filtros.generoPreferido}</span>
+            {filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente' && (
+              <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">👤 {filtros.generoPreferido}</span>
             )}
           </div>
         )}
@@ -100,7 +143,7 @@ const Perfil = () => {
         {/* BIOGRAFÍA */}
         <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="font-bold text-gray-800 mb-2">Sobre mí</h3>
-          <p className="text-gray-500 text-sm leading-relaxed">{usuario.bio}</p>
+          <p className="text-gray-500 text-sm leading-relaxed">{bio}</p>
         </section>
 
         {/* REGLAS DE CASA Y HÁBITOS */}
@@ -108,35 +151,51 @@ const Perfil = () => {
           <h3 className="font-bold text-gray-800 mb-4">Estilo de Convivencia</h3>
           
           <div className="grid grid-cols-2 gap-3 mb-5">
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${usuario.preferencias.fuma ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
-              <span className="text-base">{usuario.preferencias.fuma ? '🚬' : '🚭'}</span>
-              <span className="text-[11px] font-bold">{usuario.preferencias.fuma ? 'Permite Fumar' : 'Libre de humo'}</span>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${
+                preferencias.fuma ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'
+              }`}>
+              <span className="text-base">{preferencias.fuma ? '🚬' : '🚭'}</span>
+              <span className="text-[11px] font-bold">{preferencias.fuma ? 'Permite Fumar' : 'Libre de humo'}</span>
             </div>
-            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${usuario.preferencias.mascotas ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600'}`}>
-              <span className="text-base">{usuario.preferencias.mascotas ? '🐾' : '🚫'}</span>
-              <span className="text-[11px] font-bold">{usuario.preferencias.mascotas ? 'Pet friendly' : 'Sin mascotas'}</span>
+            <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${
+                preferencias.mascotas ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600'
+              }`}>
+              <span className="text-base">{preferencias.mascotas ? '🐾' : '🚫'}</span>
+              <span className="text-[11px] font-bold">{preferencias.mascotas ? 'Pet friendly' : 'Sin mascotas'}</span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-gray-50 border-gray-100 text-gray-700">
               <span className="text-base">🍷</span>
-              <span className="text-[11px] font-bold leading-tight">Alcohol: {usuario.preferencias.bebeAlcohol}</span>
+              <span className="text-[11px] font-bold leading-tight">
+                Alcohol: {preferencias.bebeAlcohol || 'N/D'}
+              </span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-gray-50 border-gray-100 text-gray-700">
               <span className="text-base">🥗</span>
-              <span className="text-[11px] font-bold leading-tight">Dieta: {usuario.preferencias.tipoDieta}</span>
+              <span className="text-[11px] font-bold leading-tight">
+                Dieta: {preferencias.tipoDieta || 'N/D'}
+              </span>
             </div>
           </div>
 
           <div className="space-y-3 mb-6">
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
               <span className="text-[11px] font-bold text-gray-600">Visitas de amigos</span>
-              <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md ${usuario.preferencias.visitasFrecuentes ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                {usuario.preferencias.visitasFrecuentes ? 'PERMITIDAS' : 'RESTRINGIDAS'}
+              <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md ${
+                preferencias.visitasFrecuentes
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {preferencias.visitasFrecuentes ? 'PERMITIDAS' : 'RESTRINGIDAS'}
               </span>
             </div>
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
               <span className="text-[11px] font-bold text-gray-600">Pareja a dormir</span>
-              <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md ${usuario.preferencias.aceptaParejasVisita ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                {usuario.preferencias.aceptaParejasVisita ? 'PERMITIDO' : 'RESTRINGIDO'}
+              <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md ${
+                preferencias.aceptaParejasVisita
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {preferencias.aceptaParejasVisita ? 'PERMITIDO' : 'RESTRINGIDO'}
               </span>
             </div>
           </div>
@@ -145,23 +204,26 @@ const Perfil = () => {
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-500 font-medium">Nivel de Orden</span>
-                <span className="font-bold text-blue-600">{usuario.preferencias.orden}/5</span>
+                <span className="font-bold text-blue-600">{preferencias.orden ? preferencias.orden : 0}/5</span>
               </div>
               <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${(usuario.preferencias.orden/5)*100}%` }}></div>
+                <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${((preferencias.orden || 0)/5)*100}%` }}></div>
               </div>
             </div>
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-500 font-medium">Tolerancia al Ruido</span>
-                <span className="font-bold text-blue-600">{usuario.preferencias.ruido}/5</span>
+                <span className="font-bold text-blue-600">{preferencias.ruido ? preferencias.ruido : 0}/5</span>
               </div>
               <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${(usuario.preferencias.ruido/5)*100}%` }}></div>
+                <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${((preferencias.ruido || 0)/5)*100}%` }}></div>
               </div>
             </div>
             <div className="pt-2 border-t border-gray-100">
-              <p className="text-[11px] text-gray-500"><span className="font-bold text-gray-700">Horario Principal:</span> {usuario.preferencias.horarioPreferido}</p>
+              <p className="text-[11px] text-gray-500">
+                <span className="font-bold text-gray-700">Horario Principal:</span>{" "}
+                {preferencias.horarioPreferido || 'N/D'}
+              </p>
             </div>
           </div>
         </section>
@@ -170,10 +232,18 @@ const Perfil = () => {
         <section>
           <h3 className="font-bold text-gray-800 mb-3 ml-2">Intereses</h3>
           <div className="flex flex-wrap gap-2">
-            {usuario.intereses.map((interes, index) => (
+            {intereses.length === 0 && (
+              <span className="text-xs text-gray-400">Sin intereses registrados</span>
+            )}
+            {intereses.map((interes, index) => (
               <span key={index} className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl text-xs font-bold text-gray-700 border border-gray-200 shadow-sm">
-                <span>{interes.icono}</span>
-                {interes.nombre}
+                <span>
+                  {interes.icono ||
+                    (interes.emoji
+                      ? interes.emoji
+                      : '⭐')}
+                </span>
+                {interes.nombre || interes.titulo || ''}
               </span>
             ))}
           </div>
@@ -183,6 +253,7 @@ const Perfil = () => {
         <Link 
           to="/login" 
           className="w-full block text-center bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 rounded-2xl border border-red-100 transition-colors mt-4"
+          onClick={() => localStorage.removeItem('token')}
         >
           Cerrar Sesión
         </Link>

@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Explorar = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Estado para alojamientos, carga y error
-  const [alojamientos, setAlojamientos] = useState([]);
+  // Estado para resultados de búsqueda (pueden ser alojamientos o estudiantes)
+  const [resultados, setResultados] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // 1. ESTADOS MAESTROS DE ACTIVACIÓN (SWITCHES)
+  // Si usarFiltrosPersona = true, modo 'Estudiantes'. Si usarFiltrosVivienda = true, modo 'Viviendas'
+  // Se permite que sólo uno esté activo.
   const [usarFiltrosPersona, setUsarFiltrosPersona] = useState(true);
   const [usarFiltrosVivienda, setUsarFiltrosVivienda] = useState(false);
 
@@ -67,26 +70,95 @@ const Explorar = () => {
     setDistanciaMaxSede(5);
   };
 
-  // Fetch de los alojamientos al cargar el componente:
-  useEffect(() => {
-    const fetchAlojamientos = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch('http://localhost:3000/api/alojamientos');
-        if (!res.ok) {
-          throw new Error('Error en la conexión al servidor');
+  // Cambiar de modo (solo uno activo a la vez)
+  const handleSwitchFiltrosPersona = () => {
+    setUsarFiltrosPersona(true);
+    setUsarFiltrosVivienda(false);
+  };
+  const handleSwitchFiltrosVivienda = () => {
+    setUsarFiltrosPersona(false);
+    setUsarFiltrosVivienda(true);
+  };
+
+  // Función para obtener token de localStorage
+  const getToken = () => {
+    try {
+      const token = localStorage.getItem('token');
+      return token;
+    } catch {
+      return null;
+    }
+  };
+
+  // Función para hacer búsqueda avanzada en el backend según el modo
+  const fetchResultados = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    const token = getToken();
+    // Si no hay token, error inmediato
+    if (!token) {
+      setError('No se encontró el token de autenticación');
+      setIsLoading(false);
+      setResultados([]);
+      return;
+    }
+    let url = '';
+    // Query String según filtros principales seleccionados
+    if (usarFiltrosVivienda) {
+      // Viviendas
+      url = 'http://localhost:3000/api/alojamientos';
+    } else {
+      url = 'http://localhost:3000/api/usuarios';
+    }
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-        const data = await res.json();
-        setAlojamientos(data);
-      } catch (err) {
-        setError(err.message || 'Error desconocido');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAlojamientos();
-  }, []);
+      });
+      if (!res.ok) throw new Error('Error en la conexión al servidor');
+      const data = await res.json();
+      setResultados(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || 'Error desconocido');
+      setResultados([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [usarFiltrosVivienda]); // dependencia para alternar entre modo viviendas o estudiantes
+
+  // Buscar resultados al cargar componente y cuando se cambie el modo principal de filtros
+  useEffect(() => {
+    fetchResultados();
+  }, [fetchResultados]);
+
+  // Ejecutar búsqueda avanzada al aplicar filtros desde el Drawer
+  const handleAplicarFiltros = () => {
+    setIsFilterOpen(false);
+    fetchResultados();
+  };
+
+  // Filtrar resultados en frontend según searchTerm
+  const resultadosFiltrados = resultados.filter((item) => {
+    if (usarFiltrosVivienda) {
+      // Viviendas
+      return (
+        searchTerm.trim() === '' ||
+        (item.titulo && item.titulo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.comuna && item.comuna.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.direccion && item.direccion.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    } else {
+      // Estudiantes
+      return (
+        searchTerm.trim() === '' ||
+        (item.nombre && item.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.universidad && item.universidad.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.carrera && item.carrera.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-20">
@@ -95,7 +167,12 @@ const Explorar = () => {
       <div className="bg-white px-6 pt-8 pb-4 shadow-sm rounded-b-3xl sticky top-0 z-40">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-blue-900">Explorar</h1>
-          <Link to="/dashboard" className="text-sm text-blue-600 font-bold hover:underline">Volver</Link>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="text-sm text-blue-600 font-bold hover:underline"
+          >
+            Volver
+          </button>
         </div>
         
         <div className="flex gap-2">
@@ -107,7 +184,11 @@ const Explorar = () => {
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por universidad, carrera o sede..." 
+              placeholder={
+                usarFiltrosVivienda
+                  ? "Buscar por dirección, título o comuna..."
+                  : "Buscar por nombre, universidad o carrera..."
+              }
               className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             />
           </div>
@@ -142,6 +223,22 @@ const Explorar = () => {
             </div>
             
             <div className="p-6 space-y-6">
+
+              {/* ------ SWITCH GENERAL MODOS ------ */}
+              <div className="flex justify-center gap-5 mb-6">
+                <button
+                  onClick={handleSwitchFiltrosPersona}
+                  className={`text-xs font-bold py-2 px-5 rounded-xl border ${usarFiltrosPersona ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-500 border-gray-200"} transition-all`}
+                >
+                  <span role="img" aria-label="Estudiantes">🎒</span> Estudiantes
+                </button>
+                <button
+                  onClick={handleSwitchFiltrosVivienda}
+                  className={`text-xs font-bold py-2 px-5 rounded-xl border ${usarFiltrosVivienda ? "bg-green-500 text-white border-green-500" : "bg-gray-50 text-gray-500 border-gray-200"} transition-all`}
+                >
+                  <span role="img" aria-label="Viviendas">🏠</span> Viviendas
+                </button>
+              </div>
               
               {/* BLOCK 1: FILTROS POR PERSONA */}
               <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm transition-all duration-300">
@@ -150,9 +247,8 @@ const Explorar = () => {
                     <span className="text-lg">🎒</span>
                     <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">Filtros por Persona</h3>
                   </div>
-                  
                   <div 
-                    onClick={() => setUsarFiltrosPersona(!usarFiltrosPersona)}
+                    onClick={handleSwitchFiltrosPersona}
                     className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${usarFiltrosPersona ? 'bg-blue-600' : 'bg-gray-200'}`}
                   >
                     <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${usarFiltrosPersona ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -160,7 +256,6 @@ const Explorar = () => {
                 </div>
 
                 <div className={`space-y-5 transition-all duration-300 ${!usarFiltrosPersona ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
-                  
                   {/* NUEVO: Filtros Académicos */}
                   <div>
                     <span className="text-xs font-semibold text-gray-500 mb-2 block">Exclusividad Académica</span>
@@ -265,9 +360,8 @@ const Explorar = () => {
                     <span className="text-lg">🏠</span>
                     <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">Filtros por Vivienda</h3>
                   </div>
-                  
                   <div 
-                    onClick={() => setUsarFiltrosVivienda(!usarFiltrosVivienda)}
+                    onClick={handleSwitchFiltrosVivienda}
                     className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${usarFiltrosVivienda ? 'bg-green-500' : 'bg-gray-200'}`}
                   >
                     <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${usarFiltrosVivienda ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -275,7 +369,6 @@ const Explorar = () => {
                 </div>
 
                 <div className={`space-y-4 transition-all duration-300 ${!usarFiltrosVivienda ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
-                  
                   {/* Comuna */}
                   <div>
                     <span className="text-xs font-semibold text-gray-500 mb-1.5 block">Sector / Comuna</span>
@@ -290,7 +383,6 @@ const Explorar = () => {
                       <option value="Quilpue">Quilpué</option>
                     </select>
                   </div>
-
                   {/* Presupuesto */}
                   <div>
                     <div className="flex justify-between items-end mb-1">
@@ -303,7 +395,6 @@ const Explorar = () => {
                       className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
                     />
                   </div>
-
                   {/* Distancia a la Sede */}
                   <div className="pt-1">
                     <div className="flex justify-between items-end mb-1">
@@ -321,12 +412,9 @@ const Explorar = () => {
                       Calculado mediante geolocalización entre la vivienda y la sede universitaria ingresada en tu perfil.
                     </p>
                   </div>
-
                 </div>
               </div>
-
             </div>
-
             {/* ACCIONES DEL DRAWER */}
             <div className="fixed bottom-0 right-0 w-[85vw] max-w-md p-6 bg-white border-t border-gray-100 flex gap-3 z-20">
               <button 
@@ -336,13 +424,12 @@ const Explorar = () => {
                 Limpiar
               </button>
               <button 
-                onClick={() => setIsFilterOpen(false)}
+                onClick={handleAplicarFiltros}
                 className="flex-[2] py-3.5 bg-blue-600 text-white font-bold rounded-2xl shadow-lg text-sm hover:bg-blue-700 transition-all active:scale-95"
               >
                 Aplicar Filtros
               </button>
             </div>
-
           </div>
         </>
       )}
@@ -351,9 +438,11 @@ const Explorar = () => {
       <div className="p-6 space-y-4">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Alojamientos Disponibles</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              {usarFiltrosVivienda ? "Alojamientos Disponibles" : "Estudiantes Encontrados"}
+            </h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Resultados para: <span className="text-blue-600 font-bold">"{searchTerm || 'Todos los alojamientos'}"</span>
+              Resultados para: <span className="text-blue-600 font-bold">"{searchTerm || (usarFiltrosVivienda ? "Todos los alojamientos" : "Todos los estudiantes")}"</span>
             </p>
           </div>
           <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg uppercase tracking-wider">
@@ -364,74 +453,106 @@ const Explorar = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-sm text-gray-600 font-bold">Cargando alojamientos...</p>
+            <p className="text-sm text-gray-600 font-bold">Cargando {usarFiltrosVivienda ? 'alojamientos' : 'estudiantes'}...</p>
           </div>
         ) : error ? (
           <div className="text-center py-8 px-4 bg-red-50 rounded-2xl border border-red-200 shadow">
             <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-2">
               <span className="text-2xl">❌</span>
             </div>
-            <p className="text-sm font-bold text-red-700">No se pudieron cargar los alojamientos</p>
+            <p className="text-sm font-bold text-red-700">
+              No se pudieron cargar los {usarFiltrosVivienda ? 'alojamientos' : 'estudiantes'}
+            </p>
             <p className="text-xs text-red-500 mt-1">{error}</p>
           </div>
-        ) : alojamientos.length === 0 ? (
+        ) : resultadosFiltrados.length === 0 ? (
           <div className="text-center py-12 px-6 bg-white rounded-3xl border border-dashed border-gray-200 shadow-sm">
             <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-xl text-gray-400">🤷</span>
             </div>
-            <p className="text-sm font-bold text-gray-700">No hay alojamientos disponibles</p>
+            <p className="text-sm font-bold text-gray-700">
+              No hay {usarFiltrosVivienda ? 'alojamientos disponibles' : 'estudiantes encontrados'}
+            </p>
             <p className="text-xs text-gray-400 mt-1 max-w-[240px] mx-auto">
               Prueba cambiando filtros o intenta más tarde.
             </p>
           </div>
         ) : (
           <div className="grid gap-5 lg:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
-            {alojamientos
-              .filter(a =>
-                searchTerm.trim() === '' ||
-                (a.titulo && a.titulo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (a.comuna && a.comuna.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (a.direccion && a.direccion.toLowerCase().includes(searchTerm.toLowerCase()))
-              )
-              .map((a, idx) => (
-                <div
-                  key={a.id || idx}
-                  className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col"
-                >
-                  {a.imagenUrl && (
-                    <img
-                      src={a.imagenUrl}
-                      alt={a.titulo}
-                      className="w-full h-36 object-cover rounded-xl mb-3"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-50 text-blue-700 font-bold uppercase tracking-widest">
-                        {a.comuna || 'Comuna desconocida'}
+            {usarFiltrosVivienda
+              ? // Modo Vivienda
+                resultadosFiltrados.map((a, idx) => (
+                  <div
+                    key={a.id || idx}
+                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col"
+                  >
+                    {a.imagenUrl && (
+                      <img
+                        src={a.imagenUrl}
+                        alt={a.titulo}
+                        className="w-full h-36 object-cover rounded-xl mb-3"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-50 text-blue-700 font-bold uppercase tracking-widest">
+                          {a.comuna || 'Comuna desconocida'}
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-base text-gray-900 mb-1">
+                        {a.titulo || 'Sin título'}
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-1">
+                        {a.direccion || 'Dirección no disponible'}
+                      </p>
+                      {a.descripcion && (
+                        <p className="text-xs text-gray-400 mb-2 line-clamp-2">{a.descripcion}</p>
+                      )}
+                    </div>
+                    <div className="flex items-end justify-between mt-1">
+                      <span className="text-green-600 font-extrabold text-lg">
+                        ${a.precio?.toLocaleString('es-CL') || '---'}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {a.habitaciones
+                          ? `${a.habitaciones} hab.` : ''}
                       </span>
                     </div>
-                    <h3 className="font-bold text-base text-gray-900 mb-1">
-                      {a.titulo || 'Sin título'}
-                    </h3>
-                    <p className="text-xs text-gray-500 mb-1">
-                      {a.direccion || 'Dirección no disponible'}
-                    </p>
-                    {a.descripcion && (
-                      <p className="text-xs text-gray-400 mb-2 line-clamp-2">{a.descripcion}</p>
+                  </div>
+                ))
+              : // Modo Estudiantes
+                resultadosFiltrados.map((u, idx) => (
+                  <div
+                    key={u.id || idx}
+                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col"
+                  >
+                    {/* Imagen de perfil si existe */}
+                    {u.fotoPerfil ? (
+                      <img
+                        src={u.fotoPerfil}
+                        alt={u.nombre}
+                        className="w-20 h-20 rounded-full object-cover mb-3 mx-auto border border-gray-200"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center font-bold text-2xl text-blue-600 mb-3 mx-auto">
+                        <span>{u.nombre ? u.nombre.charAt(0) : 'E'}</span>
+                      </div>
                     )}
+                    <div className="flex-1 text-center">
+                      <h3 className="font-bold text-base text-gray-900 mb-1 line-clamp-1">
+                        {u.nombre || 'Sin Nombre'}
+                      </h3>
+                      <p className="text-xs text-blue-700 font-extrabold mb-1 line-clamp-1">
+                        {u.universidad || 'Universidad no especificada'}
+                      </p>
+                      <p className="text-xs text-gray-500 mb-1 line-clamp-1">
+                        {u.carrera || 'Carrera no especificada'}
+                      </p>
+                    </div>
+                    {/* Aquí podrías renderizar más info, intereses, etc */}
                   </div>
-                  <div className="flex items-end justify-between mt-1">
-                    <span className="text-green-600 font-extrabold text-lg">
-                      ${a.precio?.toLocaleString('es-CL') || '---'}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {a.habitaciones
-                        ? `${a.habitaciones} hab.` : ''}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+            }
           </div>
         )}
       </div>

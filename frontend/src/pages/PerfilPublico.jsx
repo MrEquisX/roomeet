@@ -1,46 +1,68 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 
 const PerfilPublico = () => {
-  const { id } = useParams(); // Capturamos el ID de la URL
+  const { id } = useParams();
   const navigate = useNavigate();
+  const [usuarioVisitado, setUsuarioVisitado] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Datos simulados (Espejo exacto de las nuevas tablas de MariaDB para el usuario visitado)
-  const usuarioVisitado = {
-    id: id,
-    nombre: "Felipe",
-    apellido: "González",
-    carrera: "Ing. Comercial",
-    universidad: "PUCV",
-    sede: "Sede Recreo",
-    bio: "Soy ordenado, me gusta cocinar los fines de semana y busco un depto cerca del plan de Viña.",
-    filtros: {
-      soloMismaUniversidad: false,
-      soloMismaCarrera: false,
-      generoPreferido: "Indiferente"
-    },
-    preferencias: {
-      fuma: false,
-      mascotas: false,
-      bebeAlcohol: "Frecuente",
-      tipoDieta: "Omnívoro",
-      visitasFrecuentes: true,
-      aceptaParejasVisita: true,
-      horarioPreferido: "Diurno",
-      orden: 5, 
-      ruido: 1  
-    },
-    intereses: [
-      { nombre: 'Cocina', icono: '🍳' },
-      { nombre: 'Cine y Series', icono: '🎬' }
-    ],
-    // Situación Habitacional
-    tieneDepto: false,
-    datosDepto: null // Si tuviera, irían los datos aquí
-  };
+  useEffect(() => {
+    const fetchPerfil = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('No autenticado');
+        setCargando(false);
+        return;
+      }
+      try {
+        const response = await fetch(`http://localhost:3000/api/usuarios/${id}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) {
+          throw new Error('No se pudo cargar el perfil');
+        }
+        const data = await response.json();
+        setUsuarioVisitado(data);
+      } catch (err) {
+        setError(err.message || 'Error de red');
+      } finally {
+        setCargando(false);
+      }
+    };
+    fetchPerfil();
+  }, [id]);
+
+  if (cargando) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <span className="text-gray-500">Cargando perfil...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <span className="text-red-600">{error}</span>
+      </div>
+    );
+  }
+
+  if (!usuarioVisitado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <span className="text-gray-400">Perfil no encontrado.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative">
-      
       {/* Botón Flotante para Volver */}
       <button 
         onClick={() => navigate(-1)} 
@@ -54,16 +76,20 @@ const PerfilPublico = () => {
         <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
           <div className="w-28 h-28 bg-white rounded-3xl shadow-lg p-1">
             <div className="w-full h-full bg-blue-600 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold">
-              {usuarioVisitado.nombre[0]}
+              {usuarioVisitado.nombre ? usuarioVisitado.nombre[0] : ""}
             </div>
           </div>
         </div>
       </div>
 
       <div className="mt-16 text-center px-6">
-        <h1 className="text-2xl font-bold text-gray-900">{usuarioVisitado.nombre} {usuarioVisitado.apellido}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {usuarioVisitado.nombre} {usuarioVisitado.apellido}
+        </h1>
         <p className="text-sm text-gray-500 mt-1">{usuarioVisitado.carrera}</p>
-        <p className="text-blue-600 font-bold text-xs mt-0.5">{usuarioVisitado.universidad} - {usuarioVisitado.sede}</p>
+        <p className="text-blue-600 font-bold text-xs mt-0.5">
+          {usuarioVisitado.universidad}{usuarioVisitado.sede && ` - ${usuarioVisitado.sede}`}
+        </p>
         
         {/* BOTÓN DE CONTACTO (Ruta dinámica al chat con este ID) */}
         <div className="mt-6">
@@ -110,6 +136,7 @@ const PerfilPublico = () => {
         </section>
 
         {/* 4. MATRIZ DE CONVIVENCIA */}
+        {usuarioVisitado.preferencias && (
         <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wider">Estilo de Convivencia</h3>
           
@@ -169,8 +196,10 @@ const PerfilPublico = () => {
             </div>
           </div>
         </section>
+        )}
 
         {/* 6. INTERESES */}
+        {Array.isArray(usuarioVisitado.intereses) && usuarioVisitado.intereses.length > 0 && (
         <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wider">Intereses de {usuarioVisitado.nombre}</h3>
           <div className="flex flex-wrap gap-2">
@@ -181,7 +210,7 @@ const PerfilPublico = () => {
             ))}
           </div>
         </section>
-
+        )}
       </div>
     </div>
   );
