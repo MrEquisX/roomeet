@@ -7,19 +7,20 @@ const habitacionSchema = new mongoose.Schema({
 
 const alojamientoSchema = new mongoose.Schema({
     id_anfitrion: { type: mongoose.Schema.Types.ObjectId, required: true },
-    titulo: String,
+    titulo: { type: String, required: true },
     descripcion: String,
     tipoPropiedad: String,
     amoblado: String,
     gastosComunes: String,
     locomocion: String,
-    sector: String,
+    sector: { type: String, required: true },
     latitud: Number,
     longitud: Number,
     habitacionesTotales: Number,
     habitantesActuales: Number,
     caracteristicas: [String],
-    habitacionesOfrecidas: [habitacionSchema]
+    habitacionesOfrecidas: [habitacionSchema],
+    imagenes: [String]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Alojamiento', alojamientoSchema);

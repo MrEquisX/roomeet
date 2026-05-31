@@ -10,32 +10,25 @@ const { verificarToken } = require('../middlewares/verificarToken');
 // Importamos el middleware de subida de fotos que creamos para Roomeet
 const upload = require('../middlewares/subirFoto');
 
-// Ruta pública: Cualquiera puede ver la lista de alojamientos
-router.get('/', alojamientosController.obtenerAlojamientos);
+// Middleware reutilizable para mapear req.files → req.body.imagenes
+const mapearImagenes = async (req, res, next) => {
+    try {
+        req.body.imagenes = req.files && Array.isArray(req.files)
+            ? req.files.map(f => '/uploads/alojamientos/' + f.filename)
+            : [];
+        next();
+    } catch (error) {
+        res.status(400).json({ error: 'Error procesando imágenes.' });
+    }
+};
 
-// Ruta protegida: Solo usuarios con token válido pueden publicar
-// Cambiamos a upload.array('imagenes', 5) para permitir múltiples imágenes
-router.post(
-    '/',
-    verificarToken,
-    upload.array('imagenes', 5),
-    // Middleware intermedio para adaptar req.files para el controlador
-    async (req, res, next) => {
-        try {
-            // Mapear a un array de rutas/urls relativas (ajustar según lo que uses para guardado)
-            if (req.files && Array.isArray(req.files)) {
-                // Por ejemplo, almacenar la ruta relativa o URL de cada imagen
-                req.body.imagenes = req.files.map(file => file.path || file.location || file.filename);
-            } else {
-                req.body.imagenes = [];
-            }
-            // Pasamos al controlador
-            next();
-        } catch (error) {
-            res.status(400).json({ error: 'Error procesando imágenes.' });
-        }
-    },
-    alojamientosController.crearAlojamiento
-);
+// Rutas públicas
+router.get('/', alojamientosController.obtenerAlojamientos);
+router.get('/:id', alojamientosController.obtenerAlojamientoPorId);
+
+// Rutas protegidas
+router.post('/', verificarToken, upload.array('imagenes', 5), mapearImagenes, alojamientosController.crearAlojamiento);
+router.put('/:id', verificarToken, upload.array('imagenes', 5), mapearImagenes, alojamientosController.actualizarAlojamiento);
+router.delete('/:id', verificarToken, alojamientosController.eliminarAlojamiento);
 
 module.exports = router;

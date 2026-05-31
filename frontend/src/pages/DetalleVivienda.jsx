@@ -65,35 +65,40 @@ const DetalleVivienda = () => {
     fetchData();
   }, [id]);
 
-  // Postulación/contactar (puede ser crear una solicitud o abrir un chat, según backend)
+  // Postulación/contactar: crea la solicitud y navega al chat usando el ID devuelto por el backend
   const handleContactar = async () => {
     if (!vivienda) return;
+
+    const anuncianteId = vivienda.anunciante?.id || vivienda.anunciante?._id || vivienda.anuncianteId;
+    if (!anuncianteId) {
+      setContactarError('No se pudo identificar al anunciante. Intenta recargar la página.');
+      return;
+    }
 
     setContactarError('');
     setContactando(true);
     try {
       const token = localStorage.getItem('token');
-      // Cambia la URL si tu endpoint de solicitudes es diferente
       const response = await fetch('http://localhost:3000/api/solicitudes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          alojamientoId: vivienda.id || vivienda._id // Usa el campo correcto según backend
-        })
+        body: JSON.stringify({ alojamientoId: vivienda.id || vivienda._id })
       });
+
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data?.message || 'No fue posible postular/contactar');
+        throw new Error(data?.mensaje || data?.message || 'No fue posible contactar al anunciante');
       }
-      // Opcional: navegar al chat, mostrar mensaje, etc.
-      // Puedes redirigir, mostrar un toast, etc. Aquí ejemplo de navegación al chat nuevo:
-      // navigate(`/chat/nuevo-${vivienda.anunciante.id}`);
-      window.location.href = `/chat/nuevo-${vivienda.anunciante.id}`;
+
+      const solicitud = await response.json();
+      // Usamos el ID de la solicitud creada como sala de chat; si no viene, usamos el ID del anunciante
+      const chatId = solicitud._id || solicitud.id || solicitud.idSolicitud || anuncianteId;
+      navigate(`/chat/${chatId}`);
     } catch (err) {
-      setContactarError(err.message || 'Error al contactar');
+      setContactarError(err.message || 'Error al contactar. Intenta de nuevo.');
     } finally {
       setContactando(false);
     }

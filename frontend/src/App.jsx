@@ -47,7 +47,7 @@ function App() {
           <Route path="/anadir-vivienda" element={<AnadirVivienda />} />
           <Route path="/usuario/:id" element={<PerfilPublico />} />
           <Route path="/chats-archivados" element={<ChatsArchivados />} />
-          <Route path="/detalle-vivienda" element={<DetalleVivienda />} />
+          <Route path="/detalle-vivienda/:id" element={<DetalleVivienda />} />
         </Route>
       </Routes>
     </BrowserRouter>

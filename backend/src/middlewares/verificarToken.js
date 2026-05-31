@@ -20,10 +20,7 @@ const verificarToken = (req, res, next) => {
     }
 
     try {
-        // Obtenemos la llave desde el archivo .env (y dejamos un fallback de emergencia)
-        const firmaSecreta = process.env.JWT_SECRET || 'llave_super_secreta_123';
-        
-        const usuarioDecodificado = jwt.verify(token, firmaSecreta);
+        const usuarioDecodificado = jwt.verify(token, process.env.JWT_SECRET);
 
         // Si el token es válido, guardamos los datos del usuario en la petición
         req.usuario = usuarioDecodificado;

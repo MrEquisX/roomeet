@@ -80,8 +80,14 @@ const Dashboard = () => {
           </div>
 
           <div className="bg-white rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden relative">
-            {cargando || !matchDelDia ? (
+            {cargando ? (
               <div className="p-16 flex items-center justify-center min-h-40 text-gray-400">Cargando...</div>
+            ) : !matchDelDia ? (
+              <div className="p-16 flex flex-col items-center justify-center min-h-40 text-center gap-2">
+                <span className="text-4xl">✨</span>
+                <p className="font-bold text-gray-500 text-sm">Sin candidata para hoy</p>
+                <p className="text-xs text-gray-400">Completa tu perfil para mejorar tus matches</p>
+              </div>
             ) : (
               <>
                 <div className="w-full h-80 bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 relative flex items-center justify-center border-b border-gray-100">

@@ -484,7 +484,8 @@ const Explorar = () => {
                 resultadosFiltrados.map((a, idx) => (
                   <div
                     key={a.id || idx}
-                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col"
+                    onClick={() => navigate(`/detalle-vivienda/${a._id || a.id}`)}
+                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col cursor-pointer"
                   >
                     {a.imagenUrl && (
                       <img
@@ -524,7 +525,8 @@ const Explorar = () => {
                 resultadosFiltrados.map((u, idx) => (
                   <div
                     key={u.id || idx}
-                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col"
+                    onClick={() => navigate(`/usuario/${u._id || u.id}`)}
+                    className="bg-white rounded-2xl border border-gray-100 p-4 shadow hover:shadow-md transition-all flex flex-col cursor-pointer"
                   >
                     {/* Imagen de perfil si existe */}
                     {u.fotoPerfil ? (

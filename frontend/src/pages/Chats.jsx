@@ -6,6 +6,7 @@ const Chats = () => {
   const [mostrarOpciones, setMostrarOpciones] = useState(false);
   const [chats, setChats] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [errorChats, setErrorChats] = useState('');
 
   const navigate = useNavigate();
 
@@ -26,12 +27,13 @@ const Chats = () => {
         setChats(data); // Ajusta según la estructura real de tu backend, probablemente data.chats
       } catch (error) {
         setChats([]);
+        setErrorChats('No se pudieron cargar los chats. Revisa tu conexión.');
       } finally {
         setCargando(false);
       }
     };
-    fetchChats();
-  }, []);
+    if (cargando) fetchChats();
+  }, [cargando]);
 
   // Filtrado en tiempo real por nombre del otro usuario
   const chatsFiltrados = chats.filter(chat => {
@@ -64,7 +66,10 @@ const Chats = () => {
                   <button className="w-full text-left px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
                     Filtrar no leídos
                   </button>
-                  <button className="w-full text-left px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between">
+                  <button
+                    onClick={() => { setMostrarOpciones(false); navigate('/chats-archivados'); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between"
+                  >
                     Ver chats archivados
                     <span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full">1</span>
                   </button>
@@ -105,11 +110,22 @@ const Chats = () => {
             <div className="w-12 h-12 border-4 border-blue-500 border-dashed rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-blue-800 font-bold text-lg">Cargando chats...</p>
           </div>
+        ) : errorChats ? (
+          <div className="text-center py-16 px-6">
+            <span className="text-4xl block mb-3">📡</span>
+            <p className="font-bold text-gray-700 text-sm">{errorChats}</p>
+            <button
+              onClick={() => { setErrorChats(''); setCargando(true); }}
+              className="mt-4 text-xs font-bold text-blue-600 underline"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
         ) : chatsFiltrados.length > 0 ? (
           chatsFiltrados.map((chat) => (
             <div
               key={chat.id_chat ? chat.id_chat : chat._id ? chat._id : chat.id}
-              onClick={() => navigate(`/chats/${chat.id_chat ? chat.id_chat : chat._id ? chat._id : chat.id}`)}
+              onClick={() => navigate(`/chat/${chat.id_chat ? chat.id_chat : chat._id ? chat._id : chat.id}`)}
               className="flex items-center p-3 hover:bg-white rounded-3xl transition-all cursor-pointer group"
             >
               <div className="relative flex-shrink-0">

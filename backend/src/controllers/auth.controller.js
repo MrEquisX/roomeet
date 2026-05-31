@@ -82,8 +82,8 @@ const loginUsuario = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: usuario._id, rol: usuario.rol }, 
-            process.env.JWT_SECRET || 'llave_super_secreta_123', 
+            { id: usuario._id, rol: usuario.rol },
+            process.env.JWT_SECRET,
             { expiresIn: '2h' }
         );
 

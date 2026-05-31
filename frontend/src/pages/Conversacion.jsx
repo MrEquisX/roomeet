@@ -4,20 +4,20 @@ import { io } from 'socket.io-client';
 
 const SOCKET_URL = 'http://localhost:3000';
 
-let socket;
-
 const Conversacion = () => {
   const { id } = useParams();
 
-  // Referencias para inputs ocultos
+  // Referencias para inputs ocultos y socket
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const mensajesEndRef = useRef(null);
+  const socketRef = useRef(null);
 
   // Estados
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [grabandoAudio, setGrabandoAudio] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState('');
 
   // Datos simulados del contacto (puedes reemplazar luego por info real si es necesario)
   const contacto = { 
@@ -53,23 +53,20 @@ const Conversacion = () => {
   // Integración Socket.IO
   useEffect(() => {
     if (!id) return;
-    // 2) Crear la conexión
-    socket = io(SOCKET_URL, {
-      // Puedes agregar opciones si usas autenticación
-    });
 
-    // 3) Unirse al chat específico
-    socket.emit('joinChat', id);
+    const token = localStorage.getItem('token');
+    socketRef.current = io(SOCKET_URL, { auth: { token } });
+    socketRef.current.emit('joinChat', id);
 
-    // 4) Escuchar eventos de nuevos mensajes
-    socket.on('nuevoMensaje', (mensajeRecibido) => {
+    socketRef.current.on('nuevoMensaje', (mensajeRecibido) => {
       setMensajes(prev => [...prev, mensajeRecibido]);
     });
 
     return () => {
-      // Limpia la conexión al desmontar
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.off('nuevoMensaje');
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, [id]);
@@ -84,6 +81,7 @@ const Conversacion = () => {
     e.preventDefault();
     if (!nuevoMensaje.trim()) return;
 
+    setErrorEnvio('');
     const token = localStorage.getItem('token');
     try {
       const res = await fetch(`http://localhost:3000/api/chats/${id}/mensajes`, {
@@ -97,17 +95,16 @@ const Conversacion = () => {
 
       if (res.status === 201) {
         const nuevo = await res.json();
-
         setMensajes((msgs) => [...msgs, nuevo]);
         setNuevoMensaje('');
-
-        // Emitir el mensaje por socket
-        if (socket && socket.connected) {
-          socket.emit('enviarMensaje', { chatId: id, mensaje: nuevo });
+        if (socketRef.current && socketRef.current.connected) {
+          socketRef.current.emit('enviarMensaje', { chatId: id, mensaje: nuevo });
         }
+      } else {
+        setErrorEnvio('No se pudo enviar el mensaje. Intenta de nuevo.');
       }
     } catch (err) {
-      // Error al enviar, manejo opcional
+      setErrorEnvio('Sin conexión. Revisa tu red e intenta de nuevo.');
     }
   };
 
@@ -225,6 +222,14 @@ const Conversacion = () => {
 
       {/* BARRA PARA ESCRIBIR MULTIMEDIA */}
       <div className="absolute bottom-0 w-full bg-white border-t border-gray-100 p-4 pb-safe z-20 shadow-[0_-4px_20px_-15px_rgba(0,0,0,0.1)]">
+        {errorEnvio && (
+          <div className="mb-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-red-600">{errorEnvio}</p>
+            <button onClick={() => setErrorEnvio('')} className="text-red-400 hover:text-red-600 flex-shrink-0">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        )}
         {grabandoAudio ? (
           <div className="flex items-center justify-between bg-red-50 text-red-600 px-5 py-3 rounded-full border border-red-100 animate-pulse">
             <div className="flex items-center gap-3">

@@ -1,6 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
+if (!process.env.JWT_SECRET) {
+    console.error('❌ SEGURIDAD: JWT_SECRET no está definido en .env. El servidor no puede arrancar de forma insegura.');
+    process.exit(1);
+}
 
 // Importa http de Node y Server de socket.io
 const http = require('http');
@@ -62,19 +68,29 @@ const startServer = async () => {
             }
         });
 
-        // 4. Bloque de conexión y eventos de chat
+        // 4. Middleware de autenticación: rechaza conexiones sin token válido
+        io.use((socket, next) => {
+            const token = socket.handshake.auth?.token;
+            if (!token) {
+                return next(new Error('Acceso denegado: se requiere un token de autenticación.'));
+            }
+            try {
+                socket.usuario = jwt.verify(token, process.env.JWT_SECRET);
+                next();
+            } catch (err) {
+                next(new Error('Token inválido o expirado.'));
+            }
+        });
+
+        // 5. Bloque de conexión y eventos de chat
         io.on('connection', (socket) => {
-            // Unirse a una sala específica de chat
             socket.on('joinChat', (chatId) => {
                 socket.join(chatId);
             });
 
-            // Recibe un mensaje y lo retransmite SOLO a la sala correspondiente
             socket.on('enviarMensaje', (data) => {
-                // data debe tener: { chatId, mensaje }
                 if (data && data.chatId && data.mensaje) {
-                    // Retraenmitir a todos los usuarios en esa sala MENOS al que lo envió
-                    socket.to(data.chatId).emit('mensajeNuevo', data.mensaje);
+                    socket.to(data.chatId).emit('nuevoMensaje', data.mensaje);
                 }
             });
         });

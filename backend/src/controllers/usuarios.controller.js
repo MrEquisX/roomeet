@@ -28,6 +28,12 @@ const actualizarPerfil = async (req, res) => {
         const { id } = req.params;
         const { telefono, universidad, carrera, biografia, rol } = req.body;
 
+        // Bloquear IDOR: el usuario del token debe ser el dueño del perfil
+        const tokenUserId = obtenerIdDesdeToken(req);
+        if (!tokenUserId || tokenUserId.toString() !== id.toString()) {
+            return res.status(403).json({ error: 'Prohibido: no tienes permiso para modificar este perfil.' });
+        }
+
         let foto_perfil = req.body.foto_perfil;
         if (req.file) {
             foto_perfil = '/uploads/perfiles/' + req.file.filename;
