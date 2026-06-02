@@ -14,21 +14,21 @@ const perfilAcademicoSchema = new mongoose.Schema({
 }, { _id: false });
 
 const preferenciasConvivenciaSchema = new mongoose.Schema({
-  fuma: {
-    type: Boolean,
-    default: false
-  },
-  mascotas: {
-    type: Boolean,
-    default: false
-  },
-  nivel_orden: {
-    type: Number,
-    min: 1,
-    max: 5,
-    required: true
-  },
-  // Puedes agregar más campos según necesidades
+  fuma:                  { type: Boolean, default: false },
+  mascotas:              { type: Boolean, default: false },
+  nivel_orden:           { type: Number, min: 1, max: 5, required: true },
+  nivel_ruido:           { type: Number, min: 1, max: 5, default: 3 },
+  bebe_alcohol:          { type: String, default: 'Nunca' },
+  tipo_dieta:            { type: String, default: 'Omnívoro' },
+  visitas_frecuentes:    { type: Boolean, default: false },
+  acepta_parejas_visita: { type: Boolean, default: false },
+  horario_preferido:     { type: String, default: 'Diurno' },
+}, { _id: false });
+
+const filtrosSchema = new mongoose.Schema({
+  soloMismaUniversidad: { type: Boolean, default: false },
+  soloMismaCarrera:     { type: Boolean, default: false },
+  generoPreferido:      { type: String,  default: 'Indiferente' },
 }, { _id: false });
 
 const usuarioSchema = new mongoose.Schema({
@@ -75,7 +75,19 @@ const usuarioSchema = new mongoose.Schema({
     enum: ['Buscador', 'Anfitrion'],
     default: 'Buscador',
     required: true
-  }
+  },
+  bio:          { type: String, default: '' },
+  foto_perfil:  { type: String, default: '' },
+  telefono:     { type: String, default: '' },
+  filtros:      { type: filtrosSchema, default: () => ({}) },
+  alojamientoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Alojamiento',
+    default: null
+  },
+  // Recuperación de contraseña
+  resetPasswordToken:   { type: String,  select: false },
+  resetPasswordExpires: { type: Date,    select: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Usuario', usuarioSchema);

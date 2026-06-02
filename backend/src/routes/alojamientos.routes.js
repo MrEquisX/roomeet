@@ -10,12 +10,13 @@ const { verificarToken } = require('../middlewares/verificarToken');
 // Importamos el middleware de subida de fotos que creamos para Roomeet
 const upload = require('../middlewares/subirFoto');
 
-// Middleware reutilizable para mapear req.files → req.body.imagenes
+// Mapea req.files → req.body.imagenes SOLO si hay archivos nuevos.
+// Si no hay archivos, no toca req.body.imagenes para no borrar las existentes.
 const mapearImagenes = async (req, res, next) => {
     try {
-        req.body.imagenes = req.files && Array.isArray(req.files)
-            ? req.files.map(f => '/uploads/alojamientos/' + f.filename)
-            : [];
+        if (req.files && req.files.length > 0) {
+            req.body.imagenes = req.files.map(f => '/uploads/alojamientos/' + f.filename);
+        }
         next();
     } catch (error) {
         res.status(400).json({ error: 'Error procesando imágenes.' });

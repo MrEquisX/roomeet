@@ -11,7 +11,13 @@ const upload = require('../middlewares/subirFoto');
 // La ruta GET se mantiene igual
 router.get('/', usuariosController.obtenerUsuarios);
 
-// En la ruta PUT, agregamos el "upload" justo después de verificar el token
+// Perfil del usuario autenticado (requiere token)
+router.get('/mi-perfil', verificarToken, usuariosController.obtenerMiPerfil);
+
+// Editar perfil propio — sin ID en URL, usa el token
+router.put('/editar', verificarToken, upload.single('foto_perfil'), usuariosController.editarMiPerfil);
+
+// Actualizar perfil por ID (admin/IDOR-protegido)
 router.put(
     '/:id', 
     verificarToken, 

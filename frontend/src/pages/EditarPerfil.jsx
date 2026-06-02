@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const EditarPerfil = () => {
@@ -12,8 +12,29 @@ const EditarPerfil = () => {
 
   // ESTADOS DEL PERFIL (rellenados desde el backend)
   const [biografia, setBiografia] = useState('');
-  const [fotoPerfil, setFotoPerfil] = useState(null); // File sólo si cambió
+  const [fotoPerfil, setFotoPerfil] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // RECORTE DE IMAGEN (crop nativo con canvas)
+  const CROP_SIZE = 280; // px del viewport de recorte
+  const [imagenCrudaURL, setImagenCrudaURL] = useState(null);
+  const [mostrarModalCrop, setMostrarModalCrop] = useState(false);
+  const [imgDisplaySize, setImgDisplaySize] = useState({ w: CROP_SIZE, h: CROP_SIZE });
+  const [imgOffset, setImgOffset] = useState({ x: 0, y: 0 });
+  const [arrastrando, setArrastrando] = useState(false);
+  const [ultimaPos, setUltimaPos] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const cropImgRef = useRef(null);
+
+  // Re-clamp el offset cada vez que cambia el zoom para que la imagen
+  // no quede fuera del viewport de recorte
+  useEffect(() => {
+    setImgOffset(prev => ({
+      x: Math.max(-(imgDisplaySize.w * zoom - CROP_SIZE), Math.min(0, prev.x)),
+      y: Math.max(-(imgDisplaySize.h * zoom - CROP_SIZE), Math.min(0, prev.y)),
+    }));
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hábitos
   const [fuma, setFuma] = useState(false);
@@ -49,20 +70,27 @@ const EditarPerfil = () => {
         });
         if (!res.ok) throw new Error('No se pudo cargar el perfil');
         const data = await res.json();
-        setBiografia(data.biografia || '');
-        setFuma(Boolean(data.fuma));
-        setAceptaMascotas(Boolean(data.aceptaMascotas));
-        setBebeAlcohol(data.bebeAlcohol || 'Nunca');
-        setTipoDieta(data.tipoDieta || 'Omnívoro');
-        setNivelOrden(typeof data.nivelOrden === 'number' ? data.nivelOrden : 3);
-        setNivelRuido(typeof data.nivelRuido === 'number' ? data.nivelRuido : 3);
-        setVisitasFrecuentes(Boolean(data.visitasFrecuentes));
-        setAceptaParejasVisita(Boolean(data.aceptaParejasVisita));
-        setHorarioPreferido(data.horarioPreferido || 'Diurno');
-        setSoloMismaUniversidad(Boolean(data.soloMismaUniversidad));
-        setSoloMismaCarrera(Boolean(data.soloMismaCarrera));
-        setGeneroPreferido(data.generoPreferido || 'Indiferente');
-        setInteresesSeleccionados(Array.isArray(data.interesesSeleccionados) ? data.interesesSeleccionados : []);
+
+        // La API devuelve: data.bio, data.preferencias.*, data.filtros.*, data.intereses[]
+        const pref    = data.preferencias || {};
+        const filtros = data.filtros      || {};
+        const intereses = Array.isArray(data.intereses) ? data.intereses : [];
+
+        setBiografia(data.bio || '');
+        setFuma(Boolean(pref.fuma));
+        setAceptaMascotas(Boolean(pref.mascotas));
+        setBebeAlcohol(pref.bebeAlcohol || 'Nunca');
+        setTipoDieta(pref.tipoDieta || 'Omnívoro');
+        setNivelOrden(typeof pref.orden === 'number' ? pref.orden : 3);
+        setNivelRuido(typeof pref.ruido === 'number' ? pref.ruido : 3);
+        setVisitasFrecuentes(Boolean(pref.visitasFrecuentes));
+        setAceptaParejasVisita(Boolean(pref.aceptaParejasVisita));
+        setHorarioPreferido(pref.horarioPreferido || 'Diurno');
+        setSoloMismaUniversidad(Boolean(filtros.soloMismaUniversidad));
+        setSoloMismaCarrera(Boolean(filtros.soloMismaCarrera));
+        setGeneroPreferido(filtros.generoPreferido || 'Indiferente');
+        // intereses vienen como [{ nombre, icono }] — extraemos solo el nombre
+        setInteresesSeleccionados(intereses.map(i => (typeof i === 'string' ? i : i.nombre)).filter(Boolean));
 
         // Imagen - si existe foto
         if (data.fotoPerfilUrl) {
@@ -77,13 +105,115 @@ const EditarPerfil = () => {
     fetchUsuario();
   }, []);
 
-  // IMAGEN
+  // IMAGEN — abre el modal de recorte en lugar de previsualizar directo
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setFotoPerfil(file);
-      setFotoPreview(URL.createObjectURL(file));
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setImagenCrudaURL(url);
+    setImgOffset({ x: 0, y: 0 });
+    setZoom(1);
+    setMostrarModalCrop(true);
+    e.target.value = ''; // permite re-seleccionar el mismo archivo
+  };
+
+  // Se llama cuando la imagen del crop termina de cargar — calcula dimensiones
+  const handleCropImageLoad = () => {
+    const img = cropImgRef.current;
+    if (!img) return;
+    const { naturalWidth, naturalHeight } = img;
+    // Escalar para que el lado corto sea exactamente CROP_SIZE
+    let w, h;
+    if (naturalWidth <= naturalHeight) {
+      w = CROP_SIZE;
+      h = Math.round(naturalHeight * CROP_SIZE / naturalWidth);
+    } else {
+      h = CROP_SIZE;
+      w = Math.round(naturalWidth * CROP_SIZE / naturalHeight);
     }
+    setImgDisplaySize({ w, h });
+    // Centrar la imagen dentro del viewport
+    setImgOffset({ x: -Math.round((w - CROP_SIZE) / 2), y: -Math.round((h - CROP_SIZE) / 2) });
+  };
+
+  const clampOffset = (x, y, w, h) => ({
+    x: Math.max(-(w - CROP_SIZE), Math.min(0, x)),
+    y: Math.max(-(h - CROP_SIZE), Math.min(0, y)),
+  });
+
+  // Devuelve las dimensiones reales mostradas aplicando el zoom actual
+  const zoomedSize = () => ({ w: imgDisplaySize.w * zoom, h: imgDisplaySize.h * zoom });
+
+  // Mouse
+  const handleCropMouseDown = (e) => {
+    setArrastrando(true);
+    setUltimaPos({ x: e.clientX, y: e.clientY });
+    e.preventDefault();
+  };
+  const handleCropMouseMove = (e) => {
+    if (!arrastrando) return;
+    const dx = e.clientX - ultimaPos.x;
+    const dy = e.clientY - ultimaPos.y;
+    const { w, h } = zoomedSize();
+    setImgOffset(prev => clampOffset(prev.x + dx, prev.y + dy, w, h));
+    setUltimaPos({ x: e.clientX, y: e.clientY });
+  };
+  const handleCropMouseUp = () => setArrastrando(false);
+
+  // Touch
+  const handleCropTouchStart = (e) => {
+    const t = e.touches[0];
+    setArrastrando(true);
+    setUltimaPos({ x: t.clientX, y: t.clientY });
+  };
+  const handleCropTouchMove = (e) => {
+    if (!arrastrando) return;
+    const t = e.touches[0];
+    const dx = t.clientX - ultimaPos.x;
+    const dy = t.clientY - ultimaPos.y;
+    const { w, h } = zoomedSize();
+    setImgOffset(prev => clampOffset(prev.x + dx, prev.y + dy, w, h));
+    setUltimaPos({ x: t.clientX, y: t.clientY });
+  };
+
+  // Aplica el recorte usando canvas y lo convierte en File
+  const aplicarCrop = () => {
+    const img = cropImgRef.current;
+    if (!img) return;
+    // Dimensiones reales mostradas en pantalla (base × zoom)
+    const displayW = imgDisplaySize.w * zoom;
+    const displayH = imgDisplaySize.h * zoom;
+    // Factor de escala de px mostrados → px naturales
+    const scaleX = img.naturalWidth  / displayW;
+    const scaleY = img.naturalHeight / displayH;
+    // Región fuente: la parte visible en el viewport de CROP_SIZE × CROP_SIZE
+    const srcX = -imgOffset.x;
+    const srcY = -imgOffset.y;
+    const canvas = document.createElement('canvas');
+    canvas.width  = 400;
+    canvas.height = 400;
+    canvas.getContext('2d').drawImage(
+      img,
+      srcX * scaleX, srcY * scaleY,
+      CROP_SIZE * scaleX, CROP_SIZE * scaleY,
+      0, 0, 400, 400
+    );
+    canvas.toBlob((blob) => {
+      const croppedFile = new File([blob], 'foto_perfil.jpg', { type: 'image/jpeg' });
+      setFotoPerfil(croppedFile);
+      setFotoPreview(URL.createObjectURL(blob));
+      setMostrarModalCrop(false);
+      setZoom(1);
+      URL.revokeObjectURL(imagenCrudaURL);
+      setImagenCrudaURL(null);
+    }, 'image/jpeg', 0.92);
+  };
+
+  const cancelarCrop = () => {
+    setMostrarModalCrop(false);
+    URL.revokeObjectURL(imagenCrudaURL);
+    setImagenCrudaURL(null);
+    setZoom(1);
   };
 
   // INTERESES (Máximo 5)
@@ -133,7 +263,7 @@ const EditarPerfil = () => {
         formData.append('soloMismaUniversidad', soloMismaUniversidad);
         formData.append('soloMismaCarrera', soloMismaCarrera);
         formData.append('generoPreferido', generoPreferido);
-        formData.append('fotoPerfil', fotoPerfil);
+        formData.append('foto_perfil', fotoPerfil);
         (interesesSeleccionados || []).forEach((i, idx) => {
           formData.append('interesesSeleccionados[]', i);
         });
@@ -176,15 +306,18 @@ const EditarPerfil = () => {
 
       if (response.status === 200) {
         setMensajeExito('¡Tu perfil se actualizó correctamente!');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => {
           navigate('/perfil');
         }, 1500);
       } else {
         const resJson = await response.json();
         setMensajeError(resJson.mensaje || 'No se pudieron guardar tus cambios');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
       setMensajeError('Ocurrió un error inesperado al actualizar.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setCargando(false);
     }
@@ -234,7 +367,19 @@ const EditarPerfil = () => {
 
           {/* FOTO DE PERFIL */}
           <section className="flex flex-col items-center space-y-3">
-            <div className="relative group cursor-pointer">
+            {/* Input oculto — lo activa el botón mediante ref */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="relative group focus:outline-none"
+            >
               <div className="w-24 h-24 rounded-full border-4 border-blue-50 bg-gray-100 flex items-center justify-center overflow-hidden shadow-sm">
                 {fotoPreview ? (
                   <img src={fotoPreview} alt="Perfil" className="w-full h-full object-cover" />
@@ -242,17 +387,11 @@ const EditarPerfil = () => {
                   <span className="text-3xl">📷</span>
                 )}
               </div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <span className="text-white text-xs font-bold text-center px-2">Cambiar Foto</span>
               </div>
-            </div>
-            <span className="text-xs font-semibold text-gray-400">Actualiza tu foto de perfil</span>
+            </button>
+            <span className="text-xs font-semibold text-gray-400">Toca para cambiar tu foto de perfil</span>
           </section>
 
           {/* BIOGRAFÍA */}
@@ -260,10 +399,10 @@ const EditarPerfil = () => {
             <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">Sobre ti</h2>
             <div>
               <textarea
-                required
                 value={biografia}
                 onChange={(e) => setBiografia(e.target.value)}
                 rows="3"
+                placeholder="Cuéntanos algo sobre ti..."
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
               ></textarea>
             </div>
@@ -440,6 +579,97 @@ const EditarPerfil = () => {
                 className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors"
               >
                 Sí, salir sin guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE RECORTE DE FOTO ── */}
+      {mostrarModalCrop && imagenCrudaURL && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          onMouseMove={handleCropMouseMove}
+          onMouseUp={handleCropMouseUp}
+          onMouseLeave={handleCropMouseUp}
+        >
+          <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm flex flex-col items-center">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Encuadra tu foto</h3>
+            <p className="text-xs text-gray-400 mb-4">Arrastra la imagen para posicionarla dentro del círculo</p>
+
+            {/* Viewport circular de recorte */}
+            <div
+              className="relative overflow-hidden border-4 border-blue-500 shadow-lg"
+              style={{
+                width: CROP_SIZE,
+                height: CROP_SIZE,
+                borderRadius: '50%',
+                cursor: arrastrando ? 'grabbing' : 'grab',
+                userSelect: 'none',
+                touchAction: 'none',
+              }}
+              onMouseDown={handleCropMouseDown}
+              onTouchStart={handleCropTouchStart}
+              onTouchMove={handleCropTouchMove}
+              onTouchEnd={() => setArrastrando(false)}
+            >
+              <img
+                ref={cropImgRef}
+                src={imagenCrudaURL}
+                alt="recorte"
+                draggable={false}
+                onLoad={handleCropImageLoad}
+                style={{
+                  width:  imgDisplaySize.w * zoom,
+                  height: imgDisplaySize.h * zoom,
+                  transform: `translate(${imgOffset.x}px, ${imgOffset.y}px)`,
+                  maxWidth: 'none',
+                  display: 'block',
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+
+            {/* Slider de zoom */}
+            <div className="w-full mt-4 space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 px-1">
+                <span>🔍 Zoom</span>
+                <span className="tabular-nums">{zoom.toFixed(1)}×</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full accent-blue-600"
+              />
+              <div className="flex justify-between text-[9px] text-gray-400 px-0.5">
+                <span>1×</span>
+                <span>2×</span>
+                <span>3×</span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-gray-400 mt-2 text-center">
+              Arrastra · Desliza el slider para hacer zoom · Recorte 400 × 400 px
+            </p>
+
+            <div className="flex gap-3 mt-4 w-full">
+              <button
+                type="button"
+                onClick={cancelarCrop}
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-2xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={aplicarCrop}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-colors shadow-md"
+              >
+                Aplicar Recorte
               </button>
             </div>
           </div>

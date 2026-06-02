@@ -1,20 +1,27 @@
 const multer = require('multer');
-const path = require('path');
+const path   = require('path');
+const fs     = require('fs');
+
+// Garantiza que la carpeta exista antes de que Multer intente escribir en ella
+const garantizarCarpeta = (dir) => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+};
 
 // Configuración de almacenamiento
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Decidimos la carpeta según el tipo de imagen
-        if (file.fieldname === "foto_perfil") {
-            cb(null, 'uploads/perfiles/');
-        } else {
-            cb(null, 'uploads/alojamientos/');
-        }
+        const dir = file.fieldname === 'foto_perfil'
+            ? 'uploads/perfiles/'
+            : 'uploads/alojamientos/';
+        garantizarCarpeta(dir);
+        cb(null, dir);
     },
     filename: (req, file, cb) => {
         // Creamos un nombre único: idUsuario-fecha-nombreOriginal
-        const id_usuario = req.usuario.id_usuario;
-        const nombreUnico = id_usuario + '-' + Date.now() + path.extname(file.originalname);
+        const idUsuario = req.usuario?.id ?? 'anonimo';
+        const nombreUnico = idUsuario + '-' + Date.now() + path.extname(file.originalname);
         cb(null, nombreUnico);
     }
 });

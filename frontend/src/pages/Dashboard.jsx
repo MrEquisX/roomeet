@@ -1,27 +1,49 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import apiClient from '../services/apiClient';
+import { apiClient } from '../services/apiClient';
+
+const API_BASE = 'http://localhost:3000';
+const getImageUrl = (ruta) => {
+  if (!ruta) return null;
+  if (ruta.startsWith('http')) return ruta;
+  return `${API_BASE}${ruta}`;
+};
 
 const Dashboard = () => {
   const [matchDelDia, setMatchDelDia] = useState(null);
   const [estudiantesRecomendados, setEstudiantesRecomendados] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [avatarInicial, setAvatarInicial] = useState('');
 
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Carga del perfil del usuario (avatar) — independiente del resto para no bloquear el UI
+    const fetchPerfil = async () => {
+      try {
+        // apiClient devuelve el JSON directamente, sin wrapper .data
+        const perfil = await apiClient.get('/usuarios/mi-perfil');
+        if (perfil?.fotoPerfilUrl) {
+          setAvatarUrl(getImageUrl(perfil.fotoPerfilUrl));
+        } else {
+          const nombre = perfil?.nombre || '';
+          setAvatarInicial(nombre ? nombre[0].toUpperCase() : '?');
+        }
+      } catch (_) { /* silencioso: si falla sólo no se muestra la foto */ }
+    };
+
     const fetchData = async () => {
       setCargando(true);
       try {
-        // Peticiones con apiClient. Si alguna pide 401, se trata en el catch.
         const [matchRes, studentsRes] = await Promise.all([
           apiClient.get('/matches/dia'),
           apiClient.get('/usuarios/recomendados'),
         ]);
-        setMatchDelDia(matchRes.data);
-        setEstudiantesRecomendados(studentsRes.data || []);
+        // Estos endpoints devuelven { data: [...] }
+        setMatchDelDia(matchRes?.data ?? matchRes);
+        setEstudiantesRecomendados(studentsRes?.data ?? studentsRes ?? []);
       } catch (error) {
-        // Si el error es por falta de autenticación, redirige al login
         if (error.response && error.response.status === 401) {
           localStorage.clear();
           navigate('/login');
@@ -33,6 +55,7 @@ const Dashboard = () => {
       }
     };
 
+    fetchPerfil();
     fetchData();
   }, [navigate]);
 
@@ -47,8 +70,18 @@ const Dashboard = () => {
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">Campus PUCV • Valparaíso</p>
           </div>
 
-          <Link to="/perfil" className="w-10 h-10 bg-gradient-to-tr from-gray-700 to-gray-900 rounded-full flex items-center justify-center text-white font-bold shadow-inner flex-shrink-0">
-            A
+          <Link to="/perfil" className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-inner border-2 border-gray-200">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt="avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-tr from-gray-700 to-gray-900 flex items-center justify-center text-white font-bold text-sm">
+                {avatarInicial}
+              </div>
+            )}
           </Link>
         </div>
       </div>

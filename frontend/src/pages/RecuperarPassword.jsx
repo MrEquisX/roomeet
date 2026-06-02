@@ -88,7 +88,7 @@ const RecuperarPassword = () => {
                   feedback.loading ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
               >
-                {feedback.loading ? "Enviando..." : "Enviar enlace"}
+                {feedback.loading ? "Enviando..." : "Enviar correo de recuperación"}
               </button>
             </form>
           </>

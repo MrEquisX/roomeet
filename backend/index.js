@@ -1,6 +1,7 @@
 const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
+const cors    = require('cors');
+const jwt     = require('jsonwebtoken');
+const path    = require('path');
 require('dotenv').config();
 
 if (!process.env.JWT_SECRET) {
@@ -27,6 +28,9 @@ const app = express();
 // Configuración de CORS
 app.use(cors());
 app.use(express.json());
+
+// Servir imágenes subidas: GET /uploads/perfiles/... o /uploads/alojamientos/...
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 2. Definición de Endpoints
 // Gestión de usuarios y perfiles

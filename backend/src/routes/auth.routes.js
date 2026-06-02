@@ -1,13 +1,20 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 
-// Importamos ambas funciones que guardamos en el controlador
-const { registrarUsuario, loginUsuario } = require('../controllers/auth.controller');
+const {
+    registrarUsuario,
+    loginUsuario,
+    olvideMiPassword,
+    resetPassword,
+} = require('../controllers/auth.controller');
 
-// Creamos el endpoint para registro (Ej: http://localhost:3000/api/auth/registro)
-router.post('/registro', registrarUsuario);
+router.post('/registro',           registrarUsuario);
+router.post('/login',              loginUsuario);
 
-// Creamos el endpoint para inicio de sesión (Ej: http://localhost:3000/api/auth/login)
-router.post('/login', loginUsuario);
+// Recuperación de contraseña
+// Paso 1: el usuario pide el enlace → se envía email con token
+router.post('/recuperar-password', olvideMiPassword);
+// Paso 2: el usuario llegó desde el enlace y envía la nueva clave
+router.post('/nueva-password',     resetPassword);
 
 module.exports = router;

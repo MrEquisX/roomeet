@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+const API_BASE = 'http://localhost:3000';
+
+const getImageUrl = (ruta) => {
+  if (!ruta) return null;
+  if (ruta.startsWith('http')) return ruta;
+  return `${API_BASE}${ruta}`;
+};
+
 const Perfil = () => {
   const navigate = useNavigate();
   const [mostrarModalVivienda, setMostrarModalVivienda] = useState(false);
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [alojamiento, setAlojamiento] = useState(null);
 
   useEffect(() => {
     const fetchPerfil = async () => {
@@ -16,7 +25,7 @@ const Perfil = () => {
           navigate('/login');
           return;
         }
-        const res = await fetch('http://localhost:3000/api/usuarios/mi-perfil', {
+        const res = await fetch(`${API_BASE}/api/usuarios/mi-perfil`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -29,6 +38,20 @@ const Perfil = () => {
         }
         const data = await res.json();
         setUsuario(data);
+
+        // Si el usuario tiene alojamiento, cargarlo
+        if (data.alojamientoId) {
+          try {
+            const resAloj = await fetch(
+              `${API_BASE}/api/alojamientos/${data.alojamientoId}`,
+              { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            if (resAloj.ok) {
+              const dataAloj = await resAloj.json();
+              setAlojamiento(dataAloj);
+            }
+          } catch (_) { /* silencioso, la tarjeta simplemente no aparece */ }
+        }
       } catch (error) {
         console.error(error);
         setUsuario(null);
@@ -89,9 +112,17 @@ const Perfil = () => {
       <div className="bg-blue-600 h-32 rounded-b-[3rem] w-full relative shadow-sm">
         <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
           <div className="w-28 h-28 bg-white rounded-3xl shadow-lg p-1">
-            <div className="w-full h-full bg-gray-800 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold select-none uppercase">
-              {nombre && nombre[0]}
-            </div>
+            {usuario.fotoPerfilUrl ? (
+              <img
+                src={getImageUrl(usuario.fotoPerfilUrl)}
+                alt="foto de perfil"
+                className="w-full h-full object-cover rounded-[1.25rem]"
+              />
+            ) : (
+              <div className="w-full h-full bg-gray-800 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold select-none uppercase">
+                {nombre && nombre[0]}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -104,22 +135,26 @@ const Perfil = () => {
         <p className="text-gray-400 text-xs mt-1">{correo}</p>
         {telefono && <p className="text-gray-400 text-xs">{telefono}</p>}
 
-        <div className="grid grid-cols-2 gap-3 mt-6">
+        {/* Si el usuario ya tiene vivienda, el botón "Editar Vivienda" vive
+            únicamente en la tarjeta de resumen de abajo, sin duplicarlo aquí. */}
+        <div className={`grid gap-3 mt-6 ${usuario.alojamientoId ? 'grid-cols-1' : 'grid-cols-2'}`}>
           <Link 
-            to="/editar-perfil" 
+            to="/editar-perfil"
             className="bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all border border-gray-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
             <span className="text-sm">Editar Perfil</span>
           </Link>
 
-          <button 
-            onClick={() => setMostrarModalVivienda(true)}
-            className="bg-gray-900 hover:bg-black text-white font-bold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-            <span className="text-sm">Añadir Vivienda</span>
-          </button>
+          {!usuario.alojamientoId && (
+            <button 
+              onClick={() => setMostrarModalVivienda(true)}
+              className="bg-gray-900 hover:bg-black text-white font-bold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+              <span className="text-sm">Añadir Vivienda</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -145,6 +180,58 @@ const Perfil = () => {
           <h3 className="font-bold text-gray-800 mb-2">Sobre mí</h3>
           <p className="text-gray-500 text-sm leading-relaxed">{bio}</p>
         </section>
+
+        {/* TARJETA DE VIVIENDA */}
+        {alojamiento && (
+          <section className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Imagen de portada */}
+            {alojamiento.imagenes && alojamiento.imagenes.length > 0 ? (
+              <img
+                src={getImageUrl(alojamiento.imagenes[0])}
+                alt="portada vivienda"
+                className="w-full h-40 object-cover"
+              />
+            ) : (
+              <div className="w-full h-32 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                <svg className="w-10 h-10 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+              </div>
+            )}
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className="font-bold text-gray-800 text-base leading-tight flex-1">
+                  {alojamiento.titulo || 'Mi Vivienda'}
+                </h3>
+                <span className="text-[10px] font-extrabold uppercase bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-lg whitespace-nowrap">
+                  {alojamiento.tipoPropiedad || '—'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">📍 {alojamiento.sector || 'Ubicación no especificada'}</p>
+
+              {alojamiento.habitacionesOfrecidas && alojamiento.habitacionesOfrecidas.length > 0 && (
+                <p className="text-sm font-bold text-blue-700 mb-4">
+                  Desde ${Number(alojamiento.habitacionesOfrecidas[0].precio || 0).toLocaleString('es-CL')} / mes
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <Link
+                  to={`/detalle-vivienda/${alojamiento._id}`}
+                  className="flex-1 text-center py-2.5 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all"
+                >
+                  Ver Publicación
+                </Link>
+                <Link
+                  to={`/editar-vivienda/${alojamiento._id}`}
+                  className="flex-1 text-center py-2.5 px-3 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl transition-all"
+                >
+                  Editar Vivienda
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* REGLAS DE CASA Y HÁBITOS */}
         <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
