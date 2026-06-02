@@ -3,15 +3,174 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
 
 const API_BASE = 'http://localhost:3000';
+
 const getImageUrl = (ruta) => {
   if (!ruta) return null;
   if (ruta.startsWith('http')) return ruta;
   return `${API_BASE}${ruta}`;
 };
 
+const getIniciales = (nombre) => {
+  if (!nombre) return '?';
+  return nombre.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+};
+
+// ─── Tarjeta de estudiante ────────────────────────────────────────────────────
+const EstudianteCard = ({ estudiante, navigate }) => {
+  const fotoUrl = getImageUrl(estudiante.fotoPerfilUrl || estudiante.fotoPerfil);
+  const viviendaId = estudiante.vivienda?.id || estudiante.vivienda?._id;
+  const tieneVivienda = Boolean(estudiante.vivienda?.tiene);
+  const userId = estudiante.id || estudiante._id;
+
+  return (
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+
+      {/* FOTO / AVATAR GRANDE */}
+      <div className="relative w-full h-60 bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
+        {fotoUrl ? (
+          <img
+            src={fotoUrl}
+            alt={estudiante.nombre}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-24 h-24 bg-gradient-to-br from-indigo-400 to-purple-600 rounded-[2rem] flex items-center justify-center text-white text-3xl font-bold shadow-xl border-4 border-white">
+              {getIniciales(estudiante.nombre)}
+            </div>
+          </div>
+        )}
+
+        {/* Badge de afinidad */}
+        {(estudiante.afinidad !== undefined && estudiante.afinidad !== null) && (
+          <div className="absolute top-4 right-4 bg-green-500 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-lg border border-white/50">
+            {estudiante.afinidad}% Match
+          </div>
+        )}
+
+        {/* Badge / botón de hogar */}
+        {tieneVivienda ? (
+          <button
+            onClick={() => viviendaId && navigate(`/detalle-vivienda/${viviendaId}`)}
+            className={`absolute bottom-4 left-4 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white px-3.5 py-1.5 rounded-xl font-extrabold text-[11px] flex items-center gap-1.5 shadow-lg transition-all ${!viviendaId ? 'pointer-events-none opacity-70' : ''}`}
+          >
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Tiene hogar · Ver
+          </button>
+        ) : (
+          <div className="absolute bottom-4 left-4 bg-orange-500 text-white px-3.5 py-1.5 rounded-xl font-extrabold text-[11px] flex items-center gap-1.5 shadow-lg">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Busca hogar
+          </div>
+        )}
+      </div>
+
+      {/* INFORMACIÓN */}
+      <div className="p-5 space-y-3">
+
+        {/* Nombre y verificación */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                to={`/usuario/${userId}`}
+                className="font-extrabold text-gray-900 text-xl hover:text-blue-600 transition-colors leading-tight"
+              >
+                {estudiante.nombre}
+              </Link>
+              {estudiante.verificado && (
+                <div title="Perfil Verificado" className="text-white bg-blue-500 p-0.5 rounded-full shadow-sm flex-shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </div>
+            {(estudiante.edad || estudiante.carrera) && (
+              <p className="text-sm text-gray-500 mt-0.5 truncate">
+                {estudiante.edad ? `${estudiante.edad} años` : ''}
+                {estudiante.edad && estudiante.carrera ? ' · ' : ''}
+                {estudiante.carrera || ''}
+              </p>
+            )}
+            {estudiante.universidad && (
+              <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{estudiante.universidad}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Preferencias rápidas */}
+        {estudiante.preferencias && (
+          <div className="flex flex-wrap gap-1.5">
+            {estudiante.preferencias.fuma !== undefined && (
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${estudiante.preferencias.fuma ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
+                {estudiante.preferencias.fuma ? '🚬 Fuma' : '🚭 No fuma'}
+              </span>
+            )}
+            {estudiante.preferencias.mascotas !== undefined && (
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${estudiante.preferencias.mascotas ? 'bg-green-50 border-green-100 text-green-600' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
+                {estudiante.preferencias.mascotas ? '🐾 Mascotas' : '🚫 Sin mascotas'}
+              </span>
+            )}
+            {estudiante.preferencias.horarioPreferido && (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100 text-gray-600">
+                🌙 {estudiante.preferencias.horarioPreferido}
+              </span>
+            )}
+            {estudiante.preferencias.orden !== undefined && estudiante.preferencias.orden !== null && (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100 text-gray-600">
+                ✨ Orden {estudiante.preferencias.orden}/5
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Bio */}
+        {estudiante.bio && (
+          <p className="text-xs text-gray-500 italic leading-relaxed line-clamp-2">
+            "{estudiante.bio}"
+          </p>
+        )}
+
+        {/* Intereses */}
+        {Array.isArray(estudiante.intereses) && estudiante.intereses.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {estudiante.intereses.slice(0, 3).map((interes, i) => (
+              <span
+                key={interes.nombre || i}
+                className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold flex items-center gap-1"
+              >
+                {interes.icono && <span>{interes.icono}</span>}
+                {interes.nombre || interes}
+              </span>
+            ))}
+            {estudiante.intereses.length > 3 && (
+              <span className="px-2.5 py-1 bg-gray-100 text-gray-400 rounded-lg text-[10px] font-bold">
+                +{estudiante.intereses.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* CTA */}
+        <Link
+          to={`/chat/${userId}`}
+          className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition-all shadow-sm text-sm active:scale-[0.98] mt-1"
+        >
+          Conectar
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = () => {
-  const [matchDelDia, setMatchDelDia] = useState(null);
-  const [estudiantesRecomendados, setEstudiantesRecomendados] = useState([]);
+  const [estudiantesAfines, setEstudiantesAfines] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [avatarInicial, setAvatarInicial] = useState('');
@@ -19,10 +178,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Carga del perfil del usuario (avatar) — independiente del resto para no bloquear el UI
     const fetchPerfil = async () => {
       try {
-        // apiClient devuelve el JSON directamente, sin wrapper .data
         const perfil = await apiClient.get('/usuarios/mi-perfil');
         if (perfil?.fotoPerfilUrl) {
           setAvatarUrl(getImageUrl(perfil.fotoPerfilUrl));
@@ -30,7 +187,9 @@ const Dashboard = () => {
           const nombre = perfil?.nombre || '';
           setAvatarInicial(nombre ? nombre[0].toUpperCase() : '?');
         }
-      } catch (_) { /* silencioso: si falla sólo no se muestra la foto */ }
+      } catch {
+        // avatar no crítico
+      }
     };
 
     const fetchData = async () => {
@@ -40,11 +199,20 @@ const Dashboard = () => {
           apiClient.get('/matches/dia'),
           apiClient.get('/usuarios/recomendados'),
         ]);
-        // Estos endpoints devuelven { data: [...] }
-        setMatchDelDia(matchRes?.data ?? matchRes);
-        setEstudiantesRecomendados(studentsRes?.data ?? studentsRes ?? []);
+
+        const todos = [];
+
+        const match = matchRes?.data ?? matchRes;
+        if (match && typeof match === 'object' && !Array.isArray(match)) {
+          todos.push({ ...match, esCandidatoDelDia: true });
+        }
+
+        const recomendados = studentsRes?.data ?? studentsRes ?? [];
+        if (Array.isArray(recomendados)) todos.push(...recomendados);
+
+        setEstudiantesAfines(todos);
       } catch (error) {
-        if (error.response && error.response.status === 401) {
+        if (error.response?.status === 401) {
           localStorage.clear();
           navigate('/login');
         } else {
@@ -62,258 +230,83 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative overflow-x-hidden">
 
-      {/* HEADER Y BUSCADOR UNIFICADO (Fijo arriba) */}
+      {/* HEADER */}
       <div className="bg-white px-6 pt-8 pb-5 shadow-sm rounded-b-3xl sticky top-0 z-40">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-blue-900 tracking-tight leading-tight transition-all">Roomeet</h1>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">Campus PUCV • Valparaíso</p>
+            <h1 className="text-2xl font-bold text-blue-900 tracking-tight leading-tight">Roomeet</h1>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">Campus PUCV · Valparaíso</p>
           </div>
 
-          <Link to="/perfil" className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-inner border-2 border-gray-200">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="avatar"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-tr from-gray-700 to-gray-900 flex items-center justify-center text-white font-bold text-sm">
-                {avatarInicial}
-              </div>
-            )}
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/explorar')}
+              className="bg-gray-100 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-2 px-4 rounded-2xl transition-all shadow-sm text-xs active:scale-[0.98]"
+            >
+              Buscador
+            </button>
+
+            <Link to="/perfil" className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 shadow-inner border-2 border-gray-200">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-gray-700 to-gray-900 flex items-center justify-center text-white font-bold text-sm">
+                  {avatarInicial}
+                </div>
+              )}
+            </Link>
+          </div>
         </div>
       </div>
 
-      <div className="p-6 space-y-8">
+      {/* SECCIÓN PRINCIPAL */}
+      <div className="p-6 space-y-5">
 
-        {/* SECCIÓN ESTRELLA: INTERFAZ DE MATCH / SWIPE CARD */}
-        <section className="relative">
-
-          <button className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 text-gray-400 hover:text-blue-600 p-2.5 rounded-full shadow-lg border border-gray-100 z-20 transition-all">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <button className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 bg-white/90 text-gray-400 hover:text-blue-600 p-2.5 rounded-full shadow-lg border border-gray-100 z-20 transition-all">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-          </button>
-
-          <div className="flex justify-between items-center mb-4 relative z-10 px-1">
-            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Candidata del Día</h3>
-            <div className="flex items-center gap-2">
-              {/* El botón de Buscador ahora usa el hook useNavigate */}
-              <button
-                type="button"
-                onClick={() => navigate('/explorar')}
-                className="text-center bg-gray-100 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-2.5 px-4 rounded-2xl transition-all shadow-sm text-xs active:scale-[0.98]"
-              >
-                Buscador
-              </button>
-            </div>
+        {/* Encabezado sección */}
+        <div className="flex justify-between items-center px-1">
+          <div>
+            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Estudiantes más afines</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Basado en tu perfil y preferencias</p>
           </div>
+          {!cargando && estudiantesAfines.length > 0 && (
+            <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg uppercase tracking-wide">
+              {estudiantesAfines.length} {estudiantesAfines.length === 1 ? 'coincidencia' : 'coincidencias'}
+            </span>
+          )}
+        </div>
 
-          <div className="bg-white rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden relative">
-            {cargando ? (
-              <div className="p-16 flex items-center justify-center min-h-40 text-gray-400">Cargando...</div>
-            ) : !matchDelDia ? (
-              <div className="p-16 flex flex-col items-center justify-center min-h-40 text-center gap-2">
-                <span className="text-4xl">✨</span>
-                <p className="font-bold text-gray-500 text-sm">Sin candidata para hoy</p>
-                <p className="text-xs text-gray-400">Completa tu perfil para mejorar tus matches</p>
-              </div>
-            ) : (
-              <>
-                <div className="w-full h-80 bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 relative flex items-center justify-center border-b border-gray-100">
-                  <div className="w-32 h-32 bg-gradient-to-br from-indigo-400 to-purple-600 rounded-[2.5rem] flex items-center justify-center text-white text-4xl font-bold shadow-xl border-4 border-white transform hover:scale-105 transition-transform flex-shrink-0">
-                    {/* Iniciales en el círculo */}
-                    {matchDelDia.nombre
-                      ? matchDelDia.nombre.split(' ').map(n => n[0]).join('').toUpperCase()
-                      : ''}
-                  </div>
-                  <div className="absolute top-6 right-6 bg-green-500 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg border border-white">
-                    {matchDelDia.afinidad ?? 0}% Match
-                  </div>
-                </div>
-
-                <div className="p-7 space-y-6">
-
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <Link to={`/usuario/${matchDelDia.id}`} className="font-bold text-gray-900 text-2xl hover:text-blue-600 transition-colors leading-tight">
-                          {matchDelDia.nombre}
-                        </Link>
-                        {matchDelDia.verificado && (
-                          <div title="Perfil Verificado" className="text-white bg-blue-500 p-0.5 rounded-full shadow-sm flex items-center justify-center">
-                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {matchDelDia.edad} años • {matchDelDia.universidad}
-                      </p>
-                      <p className="text-sm text-gray-500">{matchDelDia.carrera}</p>
-                    </div>
-                    {/* NUEVA AGRUPACIÓN DE VIVIENDA + LOGÍSTICA */}
-                    <div className="flex flex-col items-end flex-shrink-0 gap-1 text-right">
-                      {/* 1. BADGE: TIENE VIVIENDA */}
-                      {matchDelDia.vivienda && matchDelDia.vivienda.tiene ? (
-                        <div className="text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100 flex items-center gap-1 mb-0.5">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                          <span className="text-[9px] font-extrabold uppercase tracking-wider">Tiene Vivienda</span>
-                        </div>
-                      ) : (
-                        <div className="text-red-700 bg-red-50 px-2.5 py-1 rounded-lg border border-red-100 flex items-center gap-1 mb-0.5">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                          <span className="text-[9px] font-extrabold uppercase tracking-wider">Busca Vivienda</span>
-                        </div>
-                      )}
-
-                      {/* 2. SECTOR EXACTO */}
-                      <p className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">
-                        {matchDelDia.vivienda && matchDelDia.vivienda.sector
-                          ? `En ${matchDelDia.vivienda.sector}`
-                          : '--'}
-                      </p>
-
-                      {/* 3. DISTANCIA AL CAMPUS */}
-                      <p className="text-[11px] font-extrabold text-blue-600">
-                        📍 A {(matchDelDia.logistica && matchDelDia.logistica.distancia) || '--'} de {matchDelDia.sede}
-                      </p>
-
-                      {/* 4. TIEMPO ESTIMADO */}
-                      <p className="text-[10px] font-medium text-gray-500">
-                        🚌 A {(matchDelDia.logistica && matchDelDia.logistica.tiempoEstimado) || '--'} aprox.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 relative">
-                    <svg className="w-6 h-6 text-gray-200 absolute top-2 left-2" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
-                    <p className="text-xs text-gray-600 leading-relaxed italic pl-6 pr-2">
-                      {matchDelDia.bio}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-2 pt-1">
-                    <div className={`flex flex-col items-center justify-center p-2 rounded-xl border ${matchDelDia.preferencias?.fuma ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>
-                      <span className="text-lg">{matchDelDia.preferencias?.fuma ? '🚬' : '🚭'}</span>
-                      <span className="text-[9px] font-bold mt-1 text-center">{matchDelDia.preferencias?.fuma ? 'Fuma' : 'No Fuma'}</span>
-                    </div>
-                    <div className={`flex flex-col items-center justify-center p-2 rounded-xl border ${matchDelDia.preferencias?.mascotas ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600'}`}>
-                      <span className="text-lg">{matchDelDia.preferencias?.mascotas ? '🐾' : '🚫'}</span>
-                      <span className="text-[9px] font-bold mt-1 text-center">{matchDelDia.preferencias?.mascotas ? 'Mascotas' : 'Sin Mascotas'}</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center p-2 rounded-xl border bg-gray-50 border-gray-100 text-gray-700">
-                      <span className="text-lg">🌙</span>
-                      <span className="text-[9px] font-bold mt-1 text-center uppercase">{matchDelDia.preferencias?.horarioPreferido || '--'}</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center p-2 rounded-xl border bg-gray-50 border-gray-100 text-gray-700">
-                      <span className="text-lg">✨</span>
-                      <span className="text-[9px] font-bold mt-1 text-center uppercase">Orden {matchDelDia.preferencias?.orden ?? '--'}/5</span>
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
-                    <div className="flex flex-wrap gap-2">
-                      {Array.isArray(matchDelDia.intereses) && matchDelDia.intereses.map((interes) => (
-                        <span key={interes.nombre} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold tracking-wide flex items-center gap-1">
-                          <span>{interes.icono}</span> {interes.nombre}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Link to={`/chat/${matchDelDia.id}`} className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-md text-sm active:scale-[0.98] mt-4">
-                    Enviar mensaje y Conectar
-                  </Link>
-                </div>
-              </>
-            )}
+        {/* Estado cargando */}
+        {cargando ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+            <p className="text-sm text-gray-500 font-medium">Buscando estudiantes afines...</p>
           </div>
-        </section>
-
-        {/* SECCIÓN SECUNDARIA: MÁS ESTUDIANTES */}
-        <section>
-          <div className="flex justify-between items-center mb-4 px-1">
-            <h3 className="text-lg font-bold text-gray-900 tracking-tight">Más estudiantes</h3>
+        ) : estudiantesAfines.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 flex flex-col items-center text-center shadow-sm border border-gray-100 gap-3">
+            <span className="text-5xl">✨</span>
+            <p className="font-bold text-gray-700">No hay coincidencias aún</p>
+            <p className="text-sm text-gray-400 max-w-[220px]">Completa tu perfil para mejorar tus matches</p>
+            <Link to="/editar-perfil" className="mt-2 text-blue-600 font-bold text-sm hover:underline">
+              Completar perfil →
+            </Link>
           </div>
-
-          <div className="space-y-4">
-            {cargando
-              ? (
-                <div className="text-gray-400 py-16 text-center">Cargando...</div>
-              )
-              : estudiantesRecomendados && estudiantesRecomendados.length > 0
-                ? estudiantesRecomendados.map((estudiante) => (
-                  <div key={estudiante.id} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-4">
-                      <Link to={`/usuario/${estudiante.id}`} className="relative flex-shrink-0">
-                        <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-sm">
-                          {estudiante.nombre
-                            ? estudiante.nombre.split(' ').map(n => n[0]).join('').toUpperCase()
-                            : ''}
-                        </div>
-                        <div className="absolute -bottom-1.5 -right-1.5 bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-lg border border-white">
-                          {estudiante.afinidad ?? 0}%
-                        </div>
-                      </Link>
-                      <div className="flex-1 ml-1 flex flex-col justify-center">
-                        <div className="flex justify-between items-start">
-                          <Link to={`/usuario/${estudiante.id}`} className="font-bold text-gray-900 text-lg hover:text-blue-600 transition-colors leading-tight">
-                            {estudiante.nombre}
-                          </Link>
-                          <div
-                            title={estudiante.vivienda && estudiante.vivienda.tiene ? "Tiene vivienda" : "Busca vivienda"}
-                            className={`${estudiante.vivienda && estudiante.vivienda.tiene
-                              ? 'text-purple-500 bg-purple-50 border-purple-100'
-                              : 'text-red-500 bg-red-50 border-red-100'} p-2 rounded-xl border shadow-sm flex-shrink-0`}>
-                            <svg className="w-5 h-5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                              {!estudiante.vivienda?.tiene && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4l16 16"/>}
-                            </svg>
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {estudiante.edad} años • {estudiante.universidad} • {estudiante.carrera}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          {Array.isArray(estudiante.intereses)
-                            ? estudiante.intereses.slice(0, 2).map(interes => (
-                                <span key={interes.nombre}
-                                  className="text-[9px] font-bold bg-gray-100 text-gray-500 px-2 py-1 rounded">
-                                  {interes.icono} {interes.nombre}
-                                </span>
-                              ))
-                            : null
-                          }
-                          {estudiante.preferencias?.horarioPreferido &&
-                            <span className="text-[9px] font-bold bg-gray-100 text-gray-500 px-2 py-1 rounded">
-                              {estudiante.preferencias.horarioPreferido}
-                            </span>
-                          }
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-                : (
-                  <div className="text-gray-400 py-12 text-center">No hay más estudiantes recomendados</div>
-                )
-            }
+        ) : (
+          <div className="space-y-5">
+            {estudiantesAfines.map((est, idx) => (
+              <EstudianteCard
+                key={est.id || est._id || idx}
+                estudiante={est}
+                navigate={navigate}
+              />
+            ))}
           </div>
-        </section>
+        )}
 
       </div>
 
-      {/* BARRA INFERIOR DE NAVEGACIÓN */}
+      {/* BARRA INFERIOR */}
       <div className="fixed bottom-0 w-full bg-white border-t border-gray-100 px-8 py-3 flex justify-between items-center z-50 pb-safe">
-
         <Link to="/dashboard" className="flex flex-col items-center text-blue-600 w-16">
           <svg className="w-6 h-6 mb-1" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
@@ -335,7 +328,6 @@ const Dashboard = () => {
           </svg>
           <span className="text-[10px] font-medium">Perfil</span>
         </Link>
-
       </div>
 
     </div>
