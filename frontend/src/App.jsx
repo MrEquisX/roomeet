@@ -12,7 +12,6 @@ import CompletarPerfil from './pages/CompletarPerfil';
 import NuevaPassword from './pages/NuevaPassword';
 import AnadirVivienda from './pages/AnadirVivienda';
 import PerfilPublico from './pages/PerfilPublico';
-import ChatsArchivados from './pages/ChatsArchivados';
 import DetalleVivienda from './pages/DetalleVivienda';
 
 // Componente ProtectedRoute que verifica el token y redirige si no existe
@@ -47,7 +46,6 @@ function App() {
           <Route path="/anadir-vivienda" element={<AnadirVivienda />} />
           <Route path="/editar-vivienda/:id" element={<AnadirVivienda />} />
           <Route path="/usuario/:id" element={<PerfilPublico />} />
-          <Route path="/chats-archivados" element={<ChatsArchivados />} />
           <Route path="/detalle-vivienda/:id" element={<DetalleVivienda />} />
         </Route>
       </Routes>

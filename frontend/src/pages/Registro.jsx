@@ -1,8 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
+import {
+  universidadesChile,
+  API_BASE,
+  ANIO_ACTUAL,
+  ANIO_MIN_INGRESO,
+  EDAD_MINIMA,
+  EDAD_MAXIMA,
+  buscarUniversidad,
+  validarTelefono9Digitos,
+  validarFechaNacimiento,
+  validarAnioIngreso,
+  extraerDigitosTelefono,
+  buscarDireccionesNominatim,
+  obtenerFechaMaxNacimiento,
+  obtenerFechaMinNacimiento,
+} from '../utils/perfilHelpers';
 
 const customIcon = new Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -12,7 +28,10 @@ const customIcon = new Icon({
   iconAnchor: [12, 41],
 });
 
-const MapClickHandler = ({ setLatitud, setLongitud }) => {
+const MapClickHandler = (props) => {
+  const setLatitud = props.setLatitud;
+  const setLongitud = props.setLongitud;
+
   useMapEvents({
     click(e) {
       if (e && e.latlng) {
@@ -24,8 +43,11 @@ const MapClickHandler = ({ setLatitud, setLongitud }) => {
   return null;
 };
 
-const MapRecenter = ({ lat, lng }) => {
+const MapRecenter = (props) => {
+  const lat = props.lat;
+  const lng = props.lng;
   const map = useMap();
+
   useEffect(() => {
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
       map.setView([parseFloat(lat), parseFloat(lng)], 15, { animate: true });
@@ -37,8 +59,6 @@ const MapRecenter = ({ lat, lng }) => {
 const Registro = () => {
   const navigate = useNavigate();
 
-  // ----------- NUEVOS ESTADOS PARA EL FORMULARIO DE REGISTRO -----------
-  // Estado único para todos los campos
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -47,208 +67,265 @@ const Registro = () => {
     nacimiento: '',
     sexoBiologico: '',
     identidadGenero: '',
-    universidad: 'PUCV',
+    universidad: '',
     carrera: '',
     sede: '',
     ingreso: '',
     latitud: '-33.047238',
     longitud: '-71.612688',
-    fuma: 'No',
-    mascotas: 'No',
-    nivelOrden: 'Medio'
+    direccion: '',
   });
-  // Error backend/muestra de error
+
   const [backendError, setBackendError] = useState('');
-  // Mensaje de éxito bonito (UX mejorado)
-  const [mensajeExito, setMensajeExito] = useState('');
-  // MAPA
+  const [enviando, setEnviando] = useState(false);
   const [mostrarMapa, setMostrarMapa] = useState(false);
   const [buscandoGPS, setBuscandoGPS] = useState(false);
-
-  // NUEVOS ESTADOS PARA REVERSE GEOCODING
-  const [direccionLegible, setDireccionLegible] = useState('Buscando dirección...');
   const [buscandoDireccion, setBuscandoDireccion] = useState(false);
+  const [sugerenciasDireccion, setSugerenciasDireccion] = useState([]);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
-  // Cambio centralizado para formularios
+  const universidadData = useMemo(() => {
+    return buscarUniversidad(universidadesChile, form.universidad);
+  }, [form.universidad]);
+
+  const sedesDisponibles = universidadData?.sedes ?? [];
+  const carrerasDisponibles = universidadData?.carreras ?? [];
+
+  const fechaMaxNacimiento = obtenerFechaMaxNacimiento();
+  const fechaMinNacimiento = obtenerFechaMinNacimiento();
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setForm((prev) => {
+      const actualizado = { ...prev, [name]: value };
+      if (name === 'universidad') {
+        actualizado.carrera = '';
+        actualizado.sede = '';
+      }
+      if (name === 'sede') {
+        const sedeElegida = sedesDisponibles.find((s) => {
+          return s.nombre === value;
+        });
+        if (sedeElegida) {
+          actualizado.latitud = String(sedeElegida.lat);
+          actualizado.longitud = String(sedeElegida.lng);
+          actualizado.direccion = `${sedeElegida.nombre}, ${sedeElegida.comuna}, Chile`;
+        }
+      }
+      return actualizado;
+    });
     setBackendError('');
-    setMensajeExito('');
   };
 
-  // EFECTO: Traducir Coordenadas a Calle con la API de OpenStreetMap
+  const handleTelefonoChange = (e) => {
+    const digitos = extraerDigitosTelefono(e.target.value).slice(0, 9);
+    setForm((prev) => ({
+      ...prev,
+      telefono: digitos,
+    }));
+    setBackendError('');
+  };
+
+  const handleIngresoChange = (e) => {
+    const valor = e.target.value;
+    setForm((prev) => {
+      return {
+        ...prev,
+        ingreso: valor,
+      };
+    });
+    setBackendError('');
+  };
+
   useEffect(() => {
-    const traducirCoordenadas = async () => {
+    const buscarSugerencias = async () => {
+      const texto = (form.direccion || '').trim();
+      if (texto.length < 3) {
+        setSugerenciasDireccion([]);
+        return;
+      }
       setBuscandoDireccion(true);
       try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${form.latitud}&lon=${form.longitud}&zoom=18&addressdetails=1`
-        );
-        const data = await response.json();
-        if (data && data.address) {
-          const calle = data.address.road || '';
-          const numero = data.address.house_number || '';
-          const barrio = data.address.suburb || data.address.neighbourhood || '';
-          const ciudad = data.address.city || data.address.town || data.address.village || '';
-          let direccionLimpia = `${calle} ${numero}`.trim();
-          if (barrio) direccionLimpia += `, ${barrio}`;
-          if (ciudad) direccionLimpia += `, ${ciudad}`;
-          setDireccionLegible(direccionLimpia || data.display_name || 'Ubicación sin calle registrada');
-        } else {
-          setDireccionLegible('Dirección desconocida');
-        }
+        const resultados = await buscarDireccionesNominatim(texto);
+        setSugerenciasDireccion(resultados);
       } catch (error) {
-        console.error('Error al traducir dirección:', error);
-        setDireccionLegible('Error de conexión con el mapa');
+        console.error('Error al buscar direcciones:', error);
+        setSugerenciasDireccion([]);
       } finally {
         setBuscandoDireccion(false);
       }
     };
+
     const timeoutId = setTimeout(() => {
-      if (form.latitud && form.longitud) {
-        traducirCoordenadas();
+      if (mostrarSugerencias) {
+        buscarSugerencias();
       }
-    }, 800);
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line
-  }, [form.latitud, form.longitud]);
+    }, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [form.direccion, mostrarSugerencias]);
+
+  const seleccionarDireccion = (resultado) => {
+    setForm((prev) => ({
+      ...prev,
+      latitud: parseFloat(resultado.lat).toFixed(6),
+      longitud: parseFloat(resultado.lon).toFixed(6),
+      direccion: resultado.display_name,
+    }));
+    setSugerenciasDireccion([]);
+    setMostrarSugerencias(false);
+  };
 
   const obtenerUbicacionGPS = () => {
     if (!navigator.geolocation) {
       setBackendError('La geolocalización no está soportada por este navegador.');
-      setMensajeExito('');
       return;
     }
     setBuscandoGPS(true);
     setBackendError('');
-    setMensajeExito('');
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setForm(prev => ({
+        setForm((prev) => ({
           ...prev,
           latitud: position.coords.latitude.toFixed(6),
-          longitud: position.coords.longitude.toFixed(6)
+          longitud: position.coords.longitude.toFixed(6),
         }));
         setBuscandoGPS(false);
       },
       (error) => {
         console.error('Error GPS:', error);
         setBuscandoGPS(false);
-        setBackendError('No se pudo acceder al GPS. Usa el mapa manualmente para fijar la sede.');
-        setMensajeExito('');
+        setBackendError('No se pudo acceder al GPS. Usa el buscador de ubicación o el mapa.');
       },
       { enableHighAccuracy: true, timeout: 6000 }
     );
   };
 
-  // ------------ HANDLE SUBMIT PARA POST A BACKEND --------------
+  const validarFormulario = () => {
+    if (!form.nombre || !form.email || !form.password || !form.universidad || !form.carrera || !form.sede) {
+      setBackendError('Debes completar todos los campos requeridos.');
+      return false;
+    }
+    if (!validarTelefono9Digitos(form.telefono)) {
+      setBackendError('El teléfono debe tener exactamente 9 dígitos.');
+      return false;
+    }
+    if (!validarFechaNacimiento(form.nacimiento)) {
+      setBackendError(
+        `La fecha de nacimiento debe ser válida y corresponder a una edad entre ${EDAD_MINIMA} y ${EDAD_MAXIMA} años (${fechaMinNacimiento} – ${fechaMaxNacimiento}).`
+      );
+      return false;
+    }
+    if (form.nacimiento < fechaMinNacimiento || form.nacimiento > fechaMaxNacimiento) {
+      setBackendError(
+        `Debes tener al menos ${EDAD_MINIMA} años. La fecha debe estar entre ${fechaMinNacimiento} y ${fechaMaxNacimiento}.`
+      );
+      return false;
+    }
+    if (!validarAnioIngreso(form.ingreso)) {
+      setBackendError(`El año de ingreso debe estar entre ${ANIO_MIN_INGRESO} y ${ANIO_ACTUAL}.`);
+      return false;
+    }
+    const anioIngresoNum = Number(form.ingreso);
+    if (Number.isNaN(anioIngresoNum) || anioIngresoNum < ANIO_MIN_INGRESO || anioIngresoNum > ANIO_ACTUAL) {
+      setBackendError(`El año de ingreso debe estar entre ${ANIO_MIN_INGRESO} y ${ANIO_ACTUAL}.`);
+      return false;
+    }
+    if (form.password.length < 8) {
+      setBackendError('La contraseña debe tener al menos 8 caracteres.');
+      return false;
+    }
+    if (!form.sexoBiologico) {
+      setBackendError('Selecciona tu sexo.');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validación simple de campos obligatorios
-    if (
-      !form.nombre ||
-      !form.email ||
-      !form.password ||
-      !form.universidad ||
-      !form.carrera
-    ) {
-      setBackendError('Debes completar todos los campos requeridos.');
-      setMensajeExito('');
+    if (!validarFormulario()) {
       return;
     }
-    setBackendError('');
-    setMensajeExito('');
 
-    // Formatear payload, puedes ajustarlo según el backend
+    setBackendError('');
+    setEnviando(true);
+
     const payload = {
+      nombre: form.nombre,
       email: form.email,
       password: form.password,
-      nombre: form.nombre,
       telefono: form.telefono,
-      nacimiento: form.nacimiento,
-      sexoBiologico: form.sexoBiologico,
-      identidadGenero: form.identidadGenero,
-      universidad: form.universidad,
-      carrera: form.carrera,
-      sede: form.sede,
-      ingreso: form.ingreso,
-      latitud: form.latitud,
-      longitud: form.longitud,
-      direccion: direccionLegible,
-      fuma: form.fuma,
-      mascotas: form.mascotas,
-      nivelOrden: form.nivelOrden
+      fecha_nacimiento: form.nacimiento,
+      sexo_biologico: form.sexoBiologico,
+      identidad_genero: form.identidadGenero || '',
+
+      perfil_academico: {
+        universidad: form.universidad,
+        carrera: form.carrera,
+        sede: form.sede,
+        anio_ingreso: Number(form.ingreso),
+      },
+
+      ubicacion_sede: {
+        latitud: Number(form.latitud),
+        longitud: Number(form.longitud),
+        direccion: form.direccion || '',
+      },
+
+      preferencias_convivencia: {
+        fuma: 'No',
+        mascotas: 'No',
+        bebe_alcohol: 'No',
+        nivel_orden: 3,
+        nivel_ruido: 3,
+        horario_preferido: 'Indiferente',
+      },
+
+      intereses: [],
     };
 
     try {
-      const res = await fetch('http://localhost:3000/api/auth/registro', {
+      const res = await fetch(`${API_BASE}/api/auth/registro`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      if (res.status === 201) {
-        // Paso 1: mostrar mensaje bonito inmediato UX
-        setMensajeExito('Registro exitoso. Iniciando sesión automáticamente...');
-        setBackendError('');
+      const data = await res.json().catch(() => ({}));
 
-        // Paso 2: Auto-login inmediato
-        try {
-          const loginRes = await fetch('http://localhost:3000/api/auth/login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email: form.email, password: form.password })
-          });
-          if (loginRes.ok) {
-            const data = await loginRes.json();
-            const token = data.token || data.accessToken;
-            if (token) {
-              localStorage.setItem('token', token);
-              setTimeout(() => {
-                navigate('/');
-              }, 850); // Deja ver el mensaje 850ms antes de redirigir
-            } else {
-              setBackendError('Ocurrió un problema al recibir el token. Intenta iniciar sesión manualmente.');
-              setMensajeExito('');
-            }
-          } else {
-            // Manejo de error de login
-            let msg = 'Registro exitoso, pero error en login automático.';
-            try {
-              const d = await loginRes.json();
-              msg = d?.error || d?.message || msg;
-            } catch {}
-            setBackendError(msg);
-            setMensajeExito('');
-          }
-        } catch (err) {
-          setBackendError('Registro exitoso, pero no se pudo conectar para auto-login.');
-          setMensajeExito('');
+      if (res.status === 201) {
+        const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: form.email.trim().toLowerCase(),
+            password: form.password,
+          }),
+        });
+
+        const loginData = await loginRes.json().catch(() => ({}));
+
+        if (loginRes.status === 200 && loginData.token) {
+          localStorage.setItem('token', loginData.token);
+          navigate('/completar-perfil');
+          return;
         }
+
+        setBackendError('Cuenta creada, pero no se pudo iniciar sesión automáticamente. Inicia sesión manualmente.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2500);
       } else {
-        // Intentar extraer mensaje del backend si lo hay
-        let msg = 'Error al registrar usuario.';
-        try {
-          const data = await res.json();
-          msg = data?.error || data?.message || msg;
-        } catch (_) {
-          // Ignore
-        }
-        setBackendError(msg);
-        setMensajeExito('');
+        setBackendError(data?.mensaje || data?.message || data?.error || 'Error al registrar usuario.');
       }
-    } catch (err) {
-      setBackendError('No se pudo conectar al servidor. Intente nuevamente.');
-      setMensajeExito('');
+    } catch {
+      setBackendError('No se pudo conectar al servidor. Intenta nuevamente.');
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -262,17 +339,9 @@ const Registro = () => {
 
         <form onSubmit={handleSubmit} className="w-full space-y-6">
 
-          {/* Error del backend visible */}
           {backendError && (
             <div className="bg-red-100 border border-red-300 text-red-700 p-3 rounded-xl mb-2 text-xs font-semibold text-center">
               {backendError}
-            </div>
-          )}
-
-          {/* Mensaje de éxito UX mejorado */}
-          {mensajeExito && (
-            <div className="bg-green-50 border border-green-300 text-green-700 p-3 rounded-xl mb-2 text-xs font-semibold text-center shadow transition-all animate-fade-in">
-              <span className="text-base inline-block align-middle mr-2">✅</span> {mensajeExito}
             </div>
           )}
 
@@ -312,7 +381,7 @@ const Registro = () => {
                 required
                 type="text"
                 name="nombre"
-                placeholder="Ej. André Limari"
+                placeholder="Ej. María González"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 value={form.nombre}
                 onChange={handleChange}
@@ -325,11 +394,14 @@ const Registro = () => {
                   required
                   type="tel"
                   name="telefono"
-                  placeholder="+56 9..."
+                  inputMode="numeric"
+                  placeholder="912345678"
+                  maxLength={9}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   value={form.telefono}
-                  onChange={handleChange}
+                  onChange={handleTelefonoChange}
                 />
+                <p className="text-[10px] text-gray-400 mt-1 ml-1">Exactamente 9 dígitos</p>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Nacimiento</label>
@@ -337,6 +409,8 @@ const Registro = () => {
                   required
                   type="date"
                   name="nacimiento"
+                  min={fechaMinNacimiento}
+                  max={fechaMaxNacimiento}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-600"
                   value={form.nacimiento}
                   onChange={handleChange}
@@ -345,7 +419,7 @@ const Registro = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Sexo Biológico</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Sexo</label>
                 <select
                   required
                   name="sexoBiologico"
@@ -374,23 +448,28 @@ const Registro = () => {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">3. Perfil Académico</h2>
+            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">
+              3. Perfil Académico
+            </h2>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Universidad</label>
                 <select
+                  required
                   name="universidad"
                   value={form.universidad}
                   onChange={handleChange}
-                  required
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 >
-                  <option value="PUCV">PUCV</option>
-                  <option value="UTFSM">UTFSM</option>
-                  <option value="UV">UV</option>
-                  <option value="UPLA">UPLA</option>
-                  <option value="OTRA">Otra...</option>
+                  <option value="">Selecciona tu universidad...</option>
+                  {universidadesChile.map((u) => {
+                    return (
+                      <option key={u.nombre} value={u.nombre}>
+                        {u.nombre} ({u.abreviacion})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="col-span-1">
@@ -399,95 +478,104 @@ const Registro = () => {
                   required
                   type="number"
                   name="ingreso"
-                  placeholder="2020"
-                  min="2000"
-                  max="2030"
+                  min={ANIO_MIN_INGRESO}
+                  max={ANIO_ACTUAL}
+                  placeholder={String(ANIO_ACTUAL)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   value={form.ingreso}
-                  onChange={handleChange}
+                  onChange={handleIngresoChange}
                 />
+                <p className="text-[10px] text-gray-400 mt-1 ml-1">{ANIO_MIN_INGRESO}–{ANIO_ACTUAL}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Sede / Campus</label>
-                <input
-                  required
-                  type="text"
-                  name="sede"
-                  value={form.sede}
-                  onChange={handleChange}
-                  placeholder="Ej. Campus Curauma"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Carrera</label>
-                <input
-                  required
-                  type="text"
-                  name="carrera"
-                  value={form.carrera}
-                  onChange={handleChange}
-                  placeholder="Ej. Ing. en Informática"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Sede / Campus</label>
+              <select
+                required
+                name="sede"
+                value={form.sede}
+                onChange={handleChange}
+                disabled={!form.universidad}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">
+                  {form.universidad ? 'Selecciona tu sede...' : 'Primero elige una universidad'}
+                </option>
+                {sedesDisponibles.map((s) => {
+                  return (
+                    <option key={s.nombre} value={s.nombre}>
+                      {s.nombre} — {s.comuna}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
-            {/* Preferencias de convivencia (NUEVO) */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-3 mt-3 space-y-2">
-              <span className="text-xs text-gray-700 font-bold">Preferencias de Convivencia</span>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">¿Fumas?</label>
-                  <select
-                    required
-                    name="fuma"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-xs"
-                    value={form.fuma}
-                    onChange={handleChange}
-                  >
-                    <option value="No">No</option>
-                    <option value="Sí">Sí</option>
-                    <option value="Ocasional">Ocasional</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">¿Mascotas?</label>
-                  <select
-                    required
-                    name="mascotas"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-xs"
-                    value={form.mascotas}
-                    onChange={handleChange}
-                  >
-                    <option value="No">No</option>
-                    <option value="Sí">Sí</option>
-                    <option value="Indiferente">Indiferente</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Nivel de Orden</label>
-                <select
-                  required
-                  name="nivelOrden"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-xs"
-                  value={form.nivelOrden}
-                  onChange={handleChange}
-                >
-                  <option value="Bajo">Bajo</option>
-                  <option value="Medio">Medio</option>
-                  <option value="Alto">Alto</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Carrera</label>
+              <select
+                required
+                name="carrera"
+                value={form.carrera}
+                onChange={handleChange}
+                disabled={!form.universidad}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">
+                  {form.universidad ? 'Selecciona tu carrera...' : 'Primero elige una universidad'}
+                </option>
+                {carrerasDisponibles.map((c) => {
+                  return (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
-            {/* MAPA INTERACTIVO REAL CON REVERSE GEOCODING */}
             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-3">
-              <span className="text-xs font-bold text-gray-700 block">Ubicación Geográfica de la Sede</span>
+              <span className="text-xs font-bold text-gray-700 block">📍 Ubicación (calle / dirección)</span>
+              <p className="text-[10px] text-gray-400">
+                Busca tu dirección para fijar coordenadas precisas del campus o punto de referencia.
+              </p>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  name="direccion"
+                  value={form.direccion}
+                  onChange={handleChange}
+                  onFocus={() => {
+                    setMostrarSugerencias(true);
+                  }}
+                  placeholder="Ej: Av. Brasil 2241, Valparaíso"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                {buscandoDireccion && (
+                  <span className="absolute right-3 top-3.5 text-[10px] text-gray-400 animate-pulse">Buscando...</span>
+                )}
+                {mostrarSugerencias && sugerenciasDireccion.length > 0 && (
+                  <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {sugerenciasDireccion.map((item) => {
+                      return (
+                        <li key={item.place_id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              seleccionarDireccion(item);
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0"
+                          >
+                            {item.display_name}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
 
               <div className="flex gap-2">
                 <button
@@ -499,8 +587,14 @@ const Registro = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMostrarMapa(!mostrarMapa)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all ${mostrarMapa ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                  onClick={() => {
+                    setMostrarMapa(!mostrarMapa);
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                    mostrarMapa
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
                 >
                   🗺️ {mostrarMapa ? 'Ocultar Mapa' : 'Abrir Mapa'}
                 </button>
@@ -515,38 +609,47 @@ const Registro = () => {
                   >
                     <TileLayer
                       url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                      attribution='&copy; OSM'
+                      attribution="&copy; OSM"
                     />
                     <MapClickHandler
-                      setLatitud={lat => setForm(prev => ({ ...prev, latitud: lat }))}
-                      setLongitud={lng => setForm(prev => ({ ...prev, longitud: lng }))}
+                      setLatitud={(lat) => {
+                        setForm((prev) => {
+                          return { ...prev, latitud: lat };
+                        });
+                      }}
+                      setLongitud={(lng) => {
+                        setForm((prev) => {
+                          return { ...prev, longitud: lng };
+                        });
+                      }}
                     />
                     <MapRecenter lat={form.latitud} lng={form.longitud} />
-                    <Marker position={[parseFloat(form.latitud), parseFloat(form.longitud)]} icon={customIcon} />
+                    <Marker
+                      position={[parseFloat(form.latitud), parseFloat(form.longitud)]}
+                      icon={customIcon}
+                    />
                   </MapContainer>
                 </div>
               )}
 
-              <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 mt-2 flex items-center gap-3">
+              <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 flex items-center gap-3">
                 <div className="text-xl">📍</div>
                 <div className="flex flex-col flex-1 overflow-hidden">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Dirección Seleccionada</span>
-                  {buscandoDireccion ? (
-                    <span className="text-sm font-bold text-gray-400 animate-pulse truncate">Calculando calle...</span>
-                  ) : (
-                    <span className="text-sm font-bold text-gray-800 truncate" title={direccionLegible}>{direccionLegible}</span>
-                  )}
+                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Coordenadas</span>
+                  <span className="text-sm font-bold text-gray-800 truncate">
+                    {form.latitud}, {form.longitud}
+                  </span>
                 </div>
               </div>
             </div>
-
           </section>
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all mt-6 active:scale-95"
+            disabled={enviando}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all mt-6 active:scale-95 disabled:opacity-60"
           >
-            Continuar
+            {enviando ? 'Creando cuenta...' : 'Continuar'}
           </button>
         </form>
 

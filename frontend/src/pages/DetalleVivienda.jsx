@@ -164,7 +164,7 @@ const DetalleVivienda = () => {
           <div className="flex-1 pr-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider">
-                {vivienda.tipoPropiedad || vivienda.tipo || 'Alojamiento'}
+                {vivienda.tipoPropiedad || 'Alojamiento'}
               </span>
               {/* Puedes agregar lógica de disponibilidad según backend */}
               <span className="bg-green-100 text-green-800 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1">
@@ -172,10 +172,13 @@ const DetalleVivienda = () => {
                 Disponible
               </span>
             </div>
-            <h1 className="text-2xl font-black text-gray-900 leading-tight">{vivienda.titulo || vivienda.tituloAnuncio}</h1>
+            <h1 className="text-2xl font-black text-gray-900 leading-tight">{vivienda.titulo}</h1>
             <p className="text-gray-500 font-medium text-sm mt-1 flex items-center gap-1">
-              📍 {vivienda.sector || vivienda.ubicacion || ''}
+              📍 {vivienda.sector || ''}
             </p>
+            {vivienda.comuna && (
+              <p className="text-gray-400 text-xs mt-0.5">🏙 {vivienda.comuna}</p>
+            )}
           </div>
           
           <Link to={`/usuario/${vivienda.anunciante?.id || vivienda.anunciante?._id || vivienda.anuncianteId || ''}`} className="flex flex-col items-center group flex-shrink-0">
@@ -198,8 +201,8 @@ const DetalleVivienda = () => {
         {/* 3. BLOQUE DE PRECIO Y PIEZAS */}
         <div className="space-y-3 mb-8">
           <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-1">Se Arrienda</h3>
-          {(vivienda.habitacionesOfrecidas || vivienda.habitaciones || []).length > 0 ? (
-            (vivienda.habitacionesOfrecidas || vivienda.habitaciones).map((hab, i) => (
+          {(vivienda.habitacionesOfrecidas || []).length > 0 ? (
+            vivienda.habitacionesOfrecidas.map((hab, i) => (
               <div key={hab.id || hab._id || i} className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 text-white shadow-lg flex justify-between items-center">
                 <div>
                   <p className="text-[10px] font-bold text-blue-200 uppercase tracking-wider mb-1">
@@ -227,25 +230,23 @@ const DetalleVivienda = () => {
           <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
             <span className="text-xl mb-1 block">🛋️</span>
             <p className="text-[10px] font-extrabold text-gray-400 uppercase">Estado</p>
-            <p className="text-xs font-bold text-gray-800">{vivienda.amoblado || vivienda.estado || 'No especificado'}</p>
+            <p className="text-xs font-bold text-gray-800">{vivienda.amoblado || 'No especificado'}</p>
           </div>
           <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
             <span className="text-xl mb-1 block">💡</span>
             <p className="text-[10px] font-extrabold text-gray-400 uppercase">Gastos Comunes</p>
-            <p className="text-xs font-bold text-gray-800">
-              {vivienda.gastosComunes || vivienda.gastos_incluidos ? "Incluidos en el precio" : "No incluidos"}
-            </p>
+            <p className="text-xs font-bold text-gray-800">{vivienda.gastosComunes || 'No especificado'}</p>
           </div>
           <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
             <span className="text-xl mb-1 block">🚌</span>
             <p className="text-[10px] font-extrabold text-gray-400 uppercase">Locomoción</p>
-            <p className="text-xs font-bold text-gray-800">{vivienda.locomocion || vivienda.transporteCercano || 'No especificado'}</p>
+            <p className="text-xs font-bold text-gray-800">{vivienda.locomocion || 'No especificado'}</p>
           </div>
           <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
             <span className="text-xl mb-1 block">👥</span>
             <p className="text-[10px] font-extrabold text-gray-400 uppercase">Convivencia</p>
             <p className="text-xs font-bold text-gray-800">
-              Viven {vivienda.habitantesActuales || vivienda.habitantes || '-'} de {vivienda.habitacionesTotales || vivienda.habitaciones_total || '-'} pers.
+              Viven {vivienda.habitantesActuales ?? '-'} de {vivienda.habitacionesTotales ?? '-'} pers.
             </p>
           </div>
         </div>
@@ -262,8 +263,8 @@ const DetalleVivienda = () => {
         <div className="mb-8">
           <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-1 mb-3">Equipamiento</h3>
           <div className="flex flex-wrap gap-2">
-            {(vivienda.caracteristicas || vivienda.amenities || []).length > 0
-              ? (vivienda.caracteristicas || vivienda.amenities).map((caract, index) => (
+            {(vivienda.caracteristicas || []).length > 0
+              ? vivienda.caracteristicas.map((caract, index) => (
                 <span key={index} className="bg-white border border-gray-200 text-gray-700 text-[11px] font-bold px-3 py-2 rounded-xl shadow-sm">
                   ✓ {caract}
                 </span>
@@ -277,24 +278,18 @@ const DetalleVivienda = () => {
         <div className="mb-4">
           <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-1 mb-3">Ubicación</h3>
           {/* Renderizar el mapa solo si hay coordenadas */}
-          {(vivienda.latitud || vivienda.lat) && (vivienda.longitud || vivienda.lng) ? (
+          {vivienda.latitud && vivienda.longitud ? (
             <div className="w-full h-48 rounded-2xl overflow-hidden border border-gray-200 shadow-inner relative z-0">
-              <MapContainer 
-                center={[
-                  vivienda.latitud || vivienda.lat, 
-                  vivienda.longitud || vivienda.lng
-                ]} 
-                zoom={15} 
+              <MapContainer
+                center={[vivienda.latitud, vivienda.longitud]}
+                zoom={15}
                 style={{ height: '100%', width: '100%' }}
                 zoomControl={false}
                 dragging={false}
               >
                 <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-                <MapRecenter lat={vivienda.latitud || vivienda.lat} lng={vivienda.longitud || vivienda.lng} />
-                <Marker position={[
-                  vivienda.latitud || vivienda.lat, 
-                  vivienda.longitud || vivienda.lng
-                ]} icon={customIcon} />
+                <MapRecenter lat={vivienda.latitud} lng={vivienda.longitud} />
+                <Marker position={[vivienda.latitud, vivienda.longitud]} icon={customIcon} />
               </MapContainer>
             </div>
           ) : (

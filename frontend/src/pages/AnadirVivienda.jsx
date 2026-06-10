@@ -65,7 +65,9 @@ const AnadirVivienda = () => {
     tipoPropiedad: 'Departamento',
     amoblado: 'Amoblado Completo',
     gastosComunes: 'Incluidos en el precio',
+    locomocion: '',
     sector: '',
+    comuna: '',
     latitud: '-33.047238',
     longitud: '-71.612688',
     habitacionesTotales: 3,
@@ -107,7 +109,9 @@ const AnadirVivienda = () => {
           tipoPropiedad:        data.tipoPropiedad           || 'Departamento',
           amoblado:             data.amoblado                || 'Amoblado Completo',
           gastosComunes:        data.gastosComunes           || 'Incluidos en el precio',
+          locomocion:           data.locomocion              || '',
           sector:               data.sector                  || '',
+          comuna:               data.comuna                  || '',
           latitud:              data.latitud  != null ? String(data.latitud)  : '-33.047238',
           longitud:             data.longitud != null ? String(data.longitud) : '-71.612688',
           habitacionesTotales:  data.habitacionesTotales     || 3,
@@ -132,33 +136,17 @@ const AnadirVivienda = () => {
     // eslint-disable-next-line
   }, [esEdicion, paramId]);
 
-  // CATEGORÍAS
-  const categoriasServicios = [
-    {
-      categoria: "Básicos & Estudio",
-      items: [
-        { id: 'wifi', nombre: 'Wi-Fi Fibra Óptica', icono: '🌐' },
-        { id: 'escritorio', nombre: 'Espacio de Estudio / Escritorio', icono: '💻' },
-        { id: 'cocina', nombre: 'Cocina Equipada', icono: '🍳' },
-        { id: 'lavadora', nombre: 'Lavadora', icono: '🧺' }
-      ]
-    },
-    {
-      categoria: "Edificio & Extras",
-      items: [
-        { id: 'ascensor', nombre: 'Ascensor', icono: '🛗' },
-        { id: 'conserje', nombre: 'Conserjería 24/7', icono: '👮' },
-        { id: 'gym', nombre: 'Gimnasio', icono: '🏋️' },
-        { id: 'bici', nombre: 'Estacionamiento Bici', icono: '🚲' }
-      ]
-    },
-    {
-      categoria: "Climatización",
-      items: [
-        { id: 'calefaccion', nombre: 'Calefacción', icono: '🔥' },
-        { id: 'ventilador', nombre: 'Ventilador / AC', icono: '❄️' }
-      ]
-    }
+  const equipamientoAmenidades = [
+    { id: 'internet',    nombre: 'Internet',           icono: '🌐' },
+    { id: 'tv',          nombre: 'TV',                 icono: '📺' },
+    { id: 'cocina',      nombre: 'Cocina Equipada',    icono: '🍳' },
+    { id: 'lavadora',    nombre: 'Lavadora',           icono: '🧺' },
+    { id: 'ascensor',    nombre: 'Ascensor',           icono: '🛗' },
+    { id: 'conserje',    nombre: 'Conserjería 24/7',   icono: '👮' },
+    { id: 'gym',         nombre: 'Gimnasio',           icono: '🏋️' },
+    { id: 'estacionamiento', nombre: 'Estacionamiento', icono: '🅿️' },
+    { id: 'calefaccion', nombre: 'Calefacción',       icono: '🔥' },
+    { id: 'ventilador',  nombre: 'Ventilador / AC',    icono: '❄️' },
   ];
 
   // LÓGICA MATEMÁTICA ESTRICTA PARA HABITACIONES DISPONIBLES
@@ -281,11 +269,14 @@ const AnadirVivienda = () => {
     const sectorTexto =
       addr.suburb || addr.neighbourhood || addr.city_district ||
       addr.city || addr.town || addr.village || resultado.display_name;
+    const comunaTexto =
+      addr.city || addr.town || addr.municipality || addr.county || '';
     setDatos(prev => ({
       ...prev,
       latitud:  parseFloat(resultado.lat).toFixed(6),
       longitud: parseFloat(resultado.lon).toFixed(6),
       sector:   sectorTexto,
+      comuna:   comunaTexto,
     }));
     setBusquedaDireccion(resultado.display_name);
     setSugerencias([]);
@@ -341,7 +332,9 @@ const AnadirVivienda = () => {
       formData.append('tipoPropiedad',        datos.tipoPropiedad);
       formData.append('amoblado',             datos.amoblado);
       formData.append('gastosComunes',        datos.gastosComunes);
+      formData.append('locomocion',           datos.locomocion);
       formData.append('sector',               datos.sector);
+      formData.append('comuna',               datos.comuna);
       formData.append('latitud',              datos.latitud);
       formData.append('longitud',             datos.longitud);
       formData.append('habitacionesTotales',  datos.habitacionesTotales);
@@ -371,7 +364,7 @@ const AnadirVivienda = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => {
           setMostrarExito(false);
-          navigate('/dashboard');
+          navigate('/perfil');
         }, 2000);
       }
     } catch (error) {
@@ -415,6 +408,20 @@ const AnadirVivienda = () => {
           {/* SECCIÓN 1: PRESENTACIÓN (Propiedad, Amoblado, GGCC y Locomoción) */}
           <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-5">
             <h2 className="text-sm font-extrabold text-blue-600 uppercase tracking-wider">1. Detalles Principales</h2>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 ml-1 uppercase">Título del Anuncio</label>
+              <input
+                required
+                type="text"
+                value={datos.titulo}
+                onChange={(e) => {
+                  setDatos({ ...datos, titulo: e.target.value });
+                }}
+                placeholder="Ej. Amplio depto a pasos de la U"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-800"
+              />
+            </div>
 
             {/* TIPO DE PROPIEDAD */}
             <div className="flex gap-3">
@@ -463,8 +470,14 @@ const AnadirVivienda = () => {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 mb-1 ml-1 uppercase">Título del Anuncio</label>
-              <input required type="text" value={datos.titulo} onChange={(e) => setDatos({ ...datos, titulo: e.target.value })} placeholder="Ej. Amplio depto a pasos de la U" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-800" />
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 ml-1 uppercase">Acceso a Locomoción Pública</label>
+              <input
+                type="text"
+                value={datos.locomocion}
+                onChange={(e) => setDatos({ ...datos, locomocion: e.target.value })}
+                placeholder="Ej. A 2 min del Metro L3, Trolebús línea 2..."
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm text-gray-700"
+              />
             </div>
 
             <div>
@@ -653,24 +666,31 @@ const AnadirVivienda = () => {
             )}
           </section>
 
-          {/* SECCIÓN 4: AMENITIES CATEGORIZADAS */}
-          <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-5">
-            <h2 className="text-sm font-extrabold text-blue-600 uppercase tracking-wider">4. Equipamiento (Amenities)</h2>
-            {categoriasServicios.map((categoria, idx) => (
-              <div key={idx}>
-                <h3 className="text-xs font-bold text-gray-500 mb-2">{categoria.categoria}</h3>
-                <div className="flex flex-wrap gap-2">
-                  {categoria.items.map(servicio => {
-                    const activo = datos.caracteristicas.includes(servicio.nombre);
-                    return (
-                      <button key={servicio.id} type="button" onClick={() => toggleServicio(servicio.nombre)} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${activo ? 'bg-blue-600 text-white shadow-md border border-blue-600' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>
-                        <span className="text-sm">{servicio.icono}</span> {servicio.nombre}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          {/* SECCIÓN 4: EQUIPAMIENTO Y AMENIDADES */}
+          <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+            <h2 className="text-sm font-extrabold text-blue-600 uppercase tracking-wider">4. Equipamiento y Amenidades</h2>
+            <div className="flex flex-wrap gap-2">
+              {equipamientoAmenidades.map((servicio) => {
+                const activo = datos.caracteristicas.includes(servicio.nombre);
+                return (
+                  <button
+                    key={servicio.id}
+                    type="button"
+                    onClick={() => {
+                      toggleServicio(servicio.nombre);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                      activo
+                        ? 'bg-blue-600 text-white shadow-md border border-blue-600'
+                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="text-sm">{servicio.icono}</span>
+                    {servicio.nombre}
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           {/* SECCIÓN 5: UBICACIÓN Y MAPA */}
@@ -774,10 +794,12 @@ const AnadirVivienda = () => {
                 : 'Tu espacio ya es visible en el buscador de Roomeet. Prepárate para recibir mensajes.'}
             </p>
             <button
-              onClick={() => navigate(esEdicion ? '/perfil' : '/dashboard')}
+              onClick={() => {
+                navigate('/perfil');
+              }}
               className="w-full max-w-xs bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-md hover:bg-black transition-all"
             >
-              {esEdicion ? 'Ir a mi Perfil' : 'Ir al Panel'}
+              Ir a mi Perfil
             </button>
           </div>
         )}

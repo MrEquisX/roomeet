@@ -1,87 +1,1104 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const API_BASE = 'http://localhost:3000';
 
+const PRECIO_MAX_DEFAULT = 500000;
+const RADIO_KM_DEFAULT = 0;
+const EDAD_MIN_DEFECTO = 17;
+const EDAD_MAX_DEFECTO = 35;
+
+const OPCIONES_INTERES_FILTRO = [
+  'Fútbol',
+  'Gym',
+  'Videojuegos',
+  'Música',
+  'Cocinar',
+  'Mascotas',
+];
+
+// ─── Utilidades ───────────────────────────────────────────────────────────────
+
 const getToken = () => {
-  try { return localStorage.getItem('token'); } catch { return null; }
+  try {
+    return localStorage.getItem('token');
+  } catch {
+    return null;
+  }
+};
+
+const getImageUrl = (ruta) => {
+  if (!ruta) {
+    return null;
+  }
+  if (ruta.startsWith('http')) {
+    return ruta;
+  }
+  return `${API_BASE}${ruta}`;
+};
+
+const filtrarUsuariosSinPropio = (usuarios, miId) => {
+  return usuarios.filter((usuario) => {
+    const idUsuario = usuario._id || usuario.id;
+
+    if (!miId) {
+      return true;
+    }
+
+    if (!idUsuario) {
+      return true;
+    }
+
+    const idStr = String(idUsuario);
+
+    if (idStr === miId) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
+const calcularEdad = (fecha) => {
+  if (!fecha) {
+    return null;
+  }
+  const hoy = new Date();
+  const nac = new Date(fecha);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const mes = hoy.getMonth() - nac.getMonth();
+  if (mes < 0 || (mes === 0 && hoy.getDate() < nac.getDate())) {
+    edad = edad - 1;
+  }
+  return edad;
+};
+
+const usuarioTieneInteres = (usuario, interesBuscado) => {
+  const interesesCrudos = usuario.intereses || [];
+  let encontrado = false;
+
+  for (const item of interesesCrudos) {
+    let nombre = null;
+
+    if (typeof item === 'string') {
+      nombre = item;
+    } else if (item && item.nombre) {
+      nombre = item.nombre;
+    }
+
+    if (nombre === interesBuscado) {
+      encontrado = true;
+      break;
+    }
+  }
+
+  return encontrado;
+};
+
+const habitacionCumpleTipo = (habitacion, alojamiento, filtroTipo) => {
+  if (filtroTipo === 'Cualquiera') {
+    return true;
+  }
+
+  const tipoRaw = habitacion.tipoHabitacion || habitacion.tipo || '';
+
+  if (tipoRaw) {
+    if (filtroTipo === 'Privada') {
+      if (tipoRaw.includes('Privada')) {
+        return true;
+      }
+    }
+    if (filtroTipo === 'Compartida') {
+      if (tipoRaw.includes('Compartida')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const tipoPropiedad = alojamiento.tipoPropiedad || '';
+
+  if (filtroTipo === 'Privada') {
+    if (tipoPropiedad.includes('Pieza')) {
+      return true;
+    }
+  }
+
+  if (filtroTipo === 'Compartida') {
+    const habitacionesTotales = alojamiento.habitacionesTotales || 0;
+    if (habitacionesTotales > 1) {
+      return true;
+    }
+    if (tipoPropiedad.includes('Casa')) {
+      return true;
+    }
+    if (tipoPropiedad.includes('Departamento')) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const habitacionCumpleBano = (habitacion, filtroBano) => {
+  if (filtroBano === 'Cualquiera') {
+    return true;
+  }
+
+  const tipoBanoRaw = habitacion.tipoBano || habitacion.bano || '';
+
+  if (filtroBano === 'Privado') {
+    if (tipoBanoRaw.includes('Privado')) {
+      return true;
+    }
+    return false;
+  }
+
+  if (filtroBano === 'Compartido') {
+    if (tipoBanoRaw.includes('Compartido')) {
+      return true;
+    }
+    if (tipoBanoRaw.includes('Público')) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+};
+
+const calcularDistanciaHaversine = (lat1, lon1, lat2, lon2) => {
+  const R = 6371;
+  const toRad = (x) => {
+    return (x * Math.PI) / 180;
+  };
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const obtenerPrecioMinimoAlojamiento = (alojamiento) => {
+  const habitaciones = alojamiento?.habitacionesOfrecidas || [];
+  const precios = [];
+
+  for (const hab of habitaciones) {
+    const precio = Number(hab.precio) || 0;
+    if (precio > 0) {
+      precios.push(precio);
+    }
+  }
+
+  if (precios.length === 0) {
+    return 0;
+  }
+
+  let minimo = precios[0];
+  for (const p of precios) {
+    if (p < minimo) {
+      minimo = p;
+    }
+  }
+  return minimo;
+};
+
+const normalizarFuma = (valor) => {
+  if (valor === true) {
+    return 'Sí';
+  }
+  if (valor === false) {
+    return 'No';
+  }
+  if (valor === 'Ocasional') {
+    return 'Ocasionalmente';
+  }
+  return valor || 'No';
+};
+
+const normalizarBebe = (valor) => {
+  if (valor === 'Nunca') {
+    return 'No';
+  }
+  if (valor === 'Socialmente' || valor === 'Frecuente') {
+    return 'Ocasionalmente';
+  }
+  return valor || 'No';
+};
+
+const normalizarMascotas = (valor) => {
+  if (valor === true) {
+    return 'Sí';
+  }
+  if (valor === false) {
+    return 'No';
+  }
+  return valor || 'No';
+};
+
+// ─── Filtrado Personas ────────────────────────────────────────────────────────
+
+const usuarioCoincideTexto = (usuario, termino) => {
+  if (!termino.trim()) {
+    return true;
+  }
+  const term = termino.toLowerCase();
+  const nombre = (usuario.nombre_completo || '').toLowerCase();
+  const univ = (usuario.perfil_academico?.universidad || '').toLowerCase();
+  const carr = (usuario.perfil_academico?.carrera || '').toLowerCase();
+  const sede = (usuario.perfil_academico?.sede || '').toLowerCase();
+
+  if (nombre.includes(term)) {
+    return true;
+  }
+  if (univ.includes(term)) {
+    return true;
+  }
+  if (carr.includes(term)) {
+    return true;
+  }
+  if (sede.includes(term)) {
+    return true;
+  }
+  return false;
+};
+
+const usuarioPasaFiltrosPersona = (usuario, filtros, aplicarFiltrosPersona) => {
+  if (!usuarioCoincideTexto(usuario, filtros.searchTerm)) {
+    return false;
+  }
+
+  if (!aplicarFiltrosPersona) {
+    return true;
+  }
+
+  if (filtros.universidad.trim()) {
+    const uUniv = (usuario.perfil_academico?.universidad || '').toLowerCase();
+    const filtro = filtros.universidad.trim().toLowerCase();
+    if (!uUniv.includes(filtro)) {
+      return false;
+    }
+  }
+
+  if (filtros.carrera.trim()) {
+    const uCarr = (usuario.perfil_academico?.carrera || '').toLowerCase();
+    const filtro = filtros.carrera.trim().toLowerCase();
+    if (!uCarr.includes(filtro)) {
+      return false;
+    }
+  }
+
+  const pref = usuario.preferencias_convivencia || {};
+  const fumaUsuario = normalizarFuma(pref.fuma);
+  const bebeUsuario = normalizarBebe(pref.bebe_alcohol);
+  const mascotasUsuario = normalizarMascotas(pref.mascotas);
+
+  if (filtros.fuma !== 'Indiferente') {
+    if (fumaUsuario !== filtros.fuma) {
+      return false;
+    }
+  }
+
+  if (filtros.bebe !== 'Indiferente') {
+    if (bebeUsuario !== filtros.bebe) {
+      return false;
+    }
+  }
+
+  if (filtros.mascotas !== 'Indiferente') {
+    if (mascotasUsuario !== filtros.mascotas) {
+      return false;
+    }
+  }
+
+  if (filtros.nivelOrdenMin > 0) {
+    const ordenUsuario = pref.nivel_orden ?? 0;
+    if (ordenUsuario < filtros.nivelOrdenMin) {
+      return false;
+    }
+  }
+
+  if (filtros.nivelRuidoMin > 0) {
+    const ruidoUsuario = pref.nivel_ruido ?? 0;
+    if (ruidoUsuario < filtros.nivelRuidoMin) {
+      return false;
+    }
+  }
+
+  const edadMin = Number(filtros.edadMin);
+  const edadMax = Number(filtros.edadMax);
+  const edadUsuario = calcularEdad(usuario.fecha_nacimiento);
+
+  if (edadUsuario === null) {
+    return false;
+  }
+
+  if (edadUsuario < edadMin) {
+    return false;
+  }
+
+  if (edadUsuario > edadMax) {
+    return false;
+  }
+
+  if (filtros.genero !== 'Indiferente') {
+    const sexoUsuario = usuario.sexo_biologico || '';
+    if (sexoUsuario !== filtros.genero) {
+      return false;
+    }
+  }
+
+  if (filtros.interesPrincipal !== 'Cualquiera') {
+    const tieneInteres = usuarioTieneInteres(usuario, filtros.interesPrincipal);
+    if (!tieneInteres) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+// ─── Filtrado Viviendas ───────────────────────────────────────────────────────
+
+const alojamientoCoincideTexto = (alojamiento, termino) => {
+  if (!termino.trim()) {
+    return true;
+  }
+  const term = termino.toLowerCase();
+  const titulo = (alojamiento.titulo || '').toLowerCase();
+  const sector = (alojamiento.sector || '').toLowerCase();
+  const comuna = (alojamiento.comuna || '').toLowerCase();
+
+  if (titulo.includes(term)) {
+    return true;
+  }
+  if (sector.includes(term)) {
+    return true;
+  }
+  if (comuna.includes(term)) {
+    return true;
+  }
+  return false;
+};
+
+const alojamientoPasaFiltrosVivienda = (alojamiento, filtros, miUbicacion, aplicarFiltrosVivienda) => {
+  if (!alojamientoCoincideTexto(alojamiento, filtros.searchTerm)) {
+    return false;
+  }
+
+  if (!aplicarFiltrosVivienda) {
+    return true;
+  }
+
+  const precioMinimo = obtenerPrecioMinimoAlojamiento(alojamiento);
+  if (filtros.precioMax < PRECIO_MAX_DEFAULT) {
+    if (precioMinimo <= 0) {
+      return false;
+    }
+    if (precioMinimo > filtros.precioMax) {
+      return false;
+    }
+  }
+
+  if (filtros.radioKm > RADIO_KM_DEFAULT && miUbicacion) {
+    const miLat = miUbicacion.latitud;
+    const miLng = miUbicacion.longitud;
+    const vivLat = alojamiento.latitud;
+    const vivLng = alojamiento.longitud;
+
+    if (vivLat == null || vivLng == null) {
+      return false;
+    }
+
+    const distancia = calcularDistanciaHaversine(miLat, miLng, vivLat, vivLng);
+    if (distancia > filtros.radioKm) {
+      return false;
+    }
+  }
+
+  if (filtros.habitacionesMin > 0) {
+    const disponibles = alojamiento.habitacionesOfrecidas?.length || 0;
+    if (disponibles < filtros.habitacionesMin) {
+      return false;
+    }
+  }
+
+  const habitaciones = alojamiento.habitacionesOfrecidas || [];
+
+  if (filtros.tipoHabitacion !== 'Cualquiera') {
+    let tieneTipoHabitacion = false;
+
+    for (const hab of habitaciones) {
+      const cumple = habitacionCumpleTipo(hab, alojamiento, filtros.tipoHabitacion);
+      if (cumple) {
+        tieneTipoHabitacion = true;
+        break;
+      }
+    }
+
+    if (!tieneTipoHabitacion) {
+      return false;
+    }
+  }
+
+  if (filtros.tipoBano !== 'Cualquiera') {
+    let tieneBano = false;
+
+    for (const hab of habitaciones) {
+      const cumple = habitacionCumpleBano(hab, filtros.tipoBano);
+      if (cumple) {
+        tieneBano = true;
+        break;
+      }
+    }
+
+    if (!tieneBano) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+// ─── Detección de filtros activos ─────────────────────────────────────────────
+
+const hayFiltrosPersonaActivos = (filtros) => {
+  if (filtros.universidad.trim() !== '') {
+    return true;
+  }
+  if (filtros.carrera.trim() !== '') {
+    return true;
+  }
+  if (filtros.fuma !== 'Indiferente') {
+    return true;
+  }
+  if (filtros.bebe !== 'Indiferente') {
+    return true;
+  }
+  if (filtros.mascotas !== 'Indiferente') {
+    return true;
+  }
+  if (filtros.nivelOrdenMin > 0) {
+    return true;
+  }
+  if (filtros.nivelRuidoMin > 0) {
+    return true;
+  }
+  if (filtros.edadMin !== EDAD_MIN_DEFECTO) {
+    return true;
+  }
+  if (filtros.edadMax !== EDAD_MAX_DEFECTO) {
+    return true;
+  }
+  if (filtros.genero !== 'Indiferente') {
+    return true;
+  }
+  if (filtros.interesPrincipal !== 'Cualquiera') {
+    return true;
+  }
+  return false;
+};
+
+const hayFiltrosViviendaActivos = (filtros) => {
+  if (filtros.precioMax < PRECIO_MAX_DEFAULT) {
+    return true;
+  }
+  if (filtros.radioKm > RADIO_KM_DEFAULT) {
+    return true;
+  }
+  if (filtros.habitacionesMin > 0) {
+    return true;
+  }
+  if (filtros.tipoHabitacion !== 'Cualquiera') {
+    return true;
+  }
+  if (filtros.tipoBano !== 'Cualquiera') {
+    return true;
+  }
+  return false;
+};
+
+// ─── Resultados mixtos con filtrado cruzado ────────────────────────────────────
+
+const construirResultadosMixtos = (opciones) => {
+  const usuarios = opciones.usuarios;
+  const alojamientos = opciones.alojamientos;
+  const mapaAlojamientosPorId = opciones.mapaAlojamientosPorId;
+  const mapaUsuariosPorId = opciones.mapaUsuariosPorId;
+  const filtros = opciones.filtros;
+  const miUbicacion = opciones.miUbicacion;
+  const activarFiltrosPersona = opciones.activarFiltrosPersona;
+  const activarFiltrosVivienda = opciones.activarFiltrosVivienda;
+
+  let filtrosPersonaActivos = false;
+  if (activarFiltrosPersona) {
+    if (hayFiltrosPersonaActivos(filtros)) {
+      filtrosPersonaActivos = true;
+    }
+  }
+
+  let filtrosViviendaActivos = false;
+  if (activarFiltrosVivienda) {
+    if (hayFiltrosViviendaActivos(filtros)) {
+      filtrosViviendaActivos = true;
+    }
+  }
+
+  const usuariosQuePasanPersona = [];
+  for (const usuario of usuarios) {
+    const pasa = usuarioPasaFiltrosPersona(usuario, filtros, activarFiltrosPersona);
+    if (pasa) {
+      usuariosQuePasanPersona.push(usuario);
+    }
+  }
+
+  const alojamientosQuePasanVivienda = [];
+  for (const alojamiento of alojamientos) {
+    const pasa = alojamientoPasaFiltrosVivienda(
+      alojamiento,
+      filtros,
+      miUbicacion,
+      activarFiltrosVivienda
+    );
+    if (pasa) {
+      alojamientosQuePasanVivienda.push(alojamiento);
+    }
+  }
+
+  const idsAlojamientosIncluidos = new Set();
+  const itemsMixtos = [];
+
+  for (const alojamiento of alojamientosQuePasanVivienda) {
+    const idAloj = String(alojamiento._id || alojamiento.id);
+    idsAlojamientosIncluidos.add(idAloj);
+
+    let anfitrion = null;
+    if (alojamiento.id_anfitrion) {
+      anfitrion = mapaUsuariosPorId[String(alojamiento.id_anfitrion)] || null;
+    }
+
+    if (filtrosPersonaActivos && anfitrion) {
+      const anfitrionPasa = usuarioPasaFiltrosPersona(anfitrion, filtros, activarFiltrosPersona);
+      if (!anfitrionPasa) {
+        continue;
+      }
+    }
+
+    let esCruzado = false;
+    if (filtrosPersonaActivos && filtrosViviendaActivos) {
+      esCruzado = true;
+    }
+
+    itemsMixtos.push({
+      tipo: 'vivienda',
+      esCruzado,
+      alojamiento,
+      anfitrion,
+    });
+  }
+
+  for (const usuario of usuariosQuePasanPersona) {
+    const userId = String(usuario._id || usuario.id);
+    const esAnfitrion = usuario.rol === 'Anfitrion';
+    const alojamientoId = usuario.alojamientoId
+      ? String(usuario.alojamientoId)
+      : null;
+
+    if (filtrosViviendaActivos && esAnfitrion && alojamientoId) {
+      const alojamiento = mapaAlojamientosPorId[alojamientoId] || null;
+      if (!alojamiento) {
+        continue;
+      }
+      const viviendaPasa = alojamientoPasaFiltrosVivienda(
+        alojamiento,
+        filtros,
+        miUbicacion,
+        activarFiltrosVivienda
+      );
+      if (!viviendaPasa) {
+        continue;
+      }
+      if (idsAlojamientosIncluidos.has(alojamientoId)) {
+        continue;
+      }
+    }
+
+    if (filtrosViviendaActivos && esAnfitrion && !alojamientoId) {
+      continue;
+    }
+
+    let esCruzado = false;
+    if (filtrosPersonaActivos && filtrosViviendaActivos && esAnfitrion) {
+      esCruzado = true;
+    }
+
+    itemsMixtos.push({
+      tipo: 'persona',
+      esCruzado,
+      usuario,
+      alojamiento: alojamientoId
+        ? mapaAlojamientosPorId[alojamientoId] || null
+        : null,
+    });
+  }
+
+  return itemsMixtos;
+};
+
+// ─── Drawer de filtros ────────────────────────────────────────────────────────
+
+const ToggleCategoria = (props) => {
+  const activo = props.activo;
+  const alCambiar = props.alCambiar;
+  const etiqueta = props.etiqueta;
+
+  let claseFondo = 'bg-gray-200';
+  let claseCirculo = 'translate-x-0.5';
+
+  if (activo) {
+    claseFondo = 'bg-blue-600';
+    claseCirculo = 'translate-x-5';
+  }
+
+  let claseBoton = 'relative w-11 h-6 rounded-full transition-colors shrink-0 ';
+  claseBoton = claseBoton + claseFondo;
+
+  let claseCirculoCompleto = 'absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full shadow transition-transform ';
+  claseCirculoCompleto = claseCirculoCompleto + claseCirculo;
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={activo}
+      aria-label={etiqueta}
+      onClick={() => {
+        alCambiar(!activo);
+      }}
+      className={claseBoton}
+    >
+      <span className={claseCirculoCompleto} />
+    </button>
+  );
+};
+
+const DrawerFiltros = (props) => {
+  const filtros = props.filtros;
+  const setFiltros = props.setFiltros;
+  const onCerrar = props.onCerrar;
+  const onLimpiar = props.onLimpiar;
+  const hayPersonaActivos = props.hayPersonaActivos;
+  const hayViviendaActivos = props.hayViviendaActivos;
+  const activarFiltrosPersona = props.activarFiltrosPersona;
+  const setActivarFiltrosPersona = props.setActivarFiltrosPersona;
+  const activarFiltrosVivienda = props.activarFiltrosVivienda;
+  const setActivarFiltrosVivienda = props.setActivarFiltrosVivienda;
+
+  let claseContenedorPersona = 'space-y-4';
+  if (!activarFiltrosPersona) {
+    claseContenedorPersona = claseContenedorPersona + ' opacity-50 pointer-events-none';
+  }
+
+  let claseContenedorVivienda = 'space-y-4';
+  if (!activarFiltrosVivienda) {
+    claseContenedorVivienda = claseContenedorVivienda + ' opacity-50 pointer-events-none';
+  }
+
+  return (
+    <aside className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Filtros</h2>
+          <p className="text-[11px] text-gray-400">Personas + Viviendas combinables</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 font-bold"
+          aria-label="Cerrar filtros"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-xs font-extrabold text-blue-600 uppercase tracking-widest">
+              Personas
+            </h3>
+            <div className="flex items-center gap-2 shrink-0">
+              {hayPersonaActivos && (
+                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">
+                  Activos
+                </span>
+              )}
+              <ToggleCategoria
+                activo={activarFiltrosPersona}
+                alCambiar={setActivarFiltrosPersona}
+                etiqueta="Activar filtros de personas"
+              />
+            </div>
+          </div>
+
+          <div className={claseContenedorPersona}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Universidad</label>
+                <input
+                  type="text"
+                  value={filtros.universidad}
+                  onChange={(e) => {
+                    setFiltros({ ...filtros, universidad: e.target.value });
+                  }}
+                  placeholder="PUCV, UChile..."
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Carrera</label>
+                <input
+                  type="text"
+                  value={filtros.carrera}
+                  onChange={(e) => {
+                    setFiltros({ ...filtros, carrera: e.target.value });
+                  }}
+                  placeholder="Ingeniería..."
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Edad Mínima</label>
+                <input
+                  type="number"
+                  min="17"
+                  max="99"
+                  value={filtros.edadMin}
+                  onChange={(e) => {
+                    setFiltros({ ...filtros, edadMin: Number(e.target.value) || EDAD_MIN_DEFECTO });
+                  }}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Edad Máxima</label>
+                <input
+                  type="number"
+                  min="17"
+                  max="99"
+                  value={filtros.edadMax}
+                  onChange={(e) => {
+                    setFiltros({ ...filtros, edadMax: Number(e.target.value) || EDAD_MAX_DEFECTO });
+                  }}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Género</label>
+              <select
+                value={filtros.genero}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, genero: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Indiferente">Indiferente</option>
+                <option value="Femenino">Femenino</option>
+                <option value="Masculino">Masculino</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Interés Principal</label>
+              <select
+                value={filtros.interesPrincipal}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, interesPrincipal: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Cualquiera">Cualquiera</option>
+                {OPCIONES_INTERES_FILTRO.map((interes) => {
+                  return (
+                    <option key={interes} value={interes}>
+                      {interes}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Fuma</label>
+              <select
+                value={filtros.fuma}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, fuma: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Indiferente">Indiferente</option>
+                <option value="No">No fuma</option>
+                <option value="Sí">Sí fuma</option>
+                <option value="Ocasionalmente">Ocasionalmente</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Bebe alcohol</label>
+              <select
+                value={filtros.bebe}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, bebe: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Indiferente">Indiferente</option>
+                <option value="No">No</option>
+                <option value="Sí">Sí</option>
+                <option value="Ocasionalmente">Ocasionalmente</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Mascotas</label>
+              <select
+                value={filtros.mascotas}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, mascotas: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Indiferente">Indiferente</option>
+                <option value="Sí">Sí</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-1">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase">Orden mínimo</label>
+                <span className="text-xs font-bold text-blue-600">
+                  {filtros.nivelOrdenMin === 0 ? 'Sin filtro' : `≥ ${filtros.nivelOrdenMin}/5`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                step="1"
+                value={filtros.nivelOrdenMin}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, nivelOrdenMin: Number(e.target.value) });
+                }}
+                className="w-full accent-blue-600"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-1">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase">Ruido mínimo tolerado</label>
+                <span className="text-xs font-bold text-blue-600">
+                  {filtros.nivelRuidoMin === 0 ? 'Sin filtro' : `≥ ${filtros.nivelRuidoMin}/5`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                step="1"
+                value={filtros.nivelRuidoMin}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, nivelRuidoMin: Number(e.target.value) });
+                }}
+                className="w-full accent-blue-600"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="border-t border-gray-100 pt-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-xs font-extrabold text-green-600 uppercase tracking-widest">
+              Viviendas
+            </h3>
+            <div className="flex items-center gap-2 shrink-0">
+              {hayViviendaActivos && (
+                <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded-lg">
+                  Activos
+                </span>
+              )}
+              <ToggleCategoria
+                activo={activarFiltrosVivienda}
+                alCambiar={setActivarFiltrosVivienda}
+                etiqueta="Activar filtros de viviendas"
+              />
+            </div>
+          </div>
+
+          <div className={claseContenedorVivienda}>
+            <div>
+              <div className="flex justify-between mb-1">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase">Precio máximo</label>
+                <span className="text-xs font-bold text-green-600">
+                  ${filtros.precioMax.toLocaleString('es-CL')}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="80000"
+                max={PRECIO_MAX_DEFAULT}
+                step="10000"
+                value={filtros.precioMax}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, precioMax: Number(e.target.value) });
+                }}
+                className="w-full accent-green-500"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                {filtros.precioMax >= PRECIO_MAX_DEFAULT
+                  ? 'Sin tope de precio'
+                  : 'Habitación desde este valor hacia abajo'}
+              </p>
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-1">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase">Radio desde tu sede</label>
+                <span className="text-xs font-bold text-green-600">
+                  {filtros.radioKm === 0 ? 'Sin límite' : `${filtros.radioKm} km`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="25"
+                step="1"
+                value={filtros.radioKm}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, radioKm: Number(e.target.value) });
+                }}
+                className="w-full accent-green-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Habitaciones mínimas</label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={filtros.habitacionesMin}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, habitacionesMin: Number(e.target.value) || 0 });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Tipo de Habitación</label>
+              <select
+                value={filtros.tipoHabitacion}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, tipoHabitacion: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Cualquiera">Cualquiera</option>
+                <option value="Privada">Privada</option>
+                <option value="Compartida">Compartida</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Baño</label>
+              <select
+                value={filtros.tipoBano}
+                onChange={(e) => {
+                  setFiltros({ ...filtros, tipoBano: e.target.value });
+                }}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+              >
+                <option value="Cualquiera">Cualquiera</option>
+                <option value="Privado">Privado</option>
+                <option value="Compartido">Compartido</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div className="shrink-0 px-5 py-4 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onLimpiar}
+          className="w-full py-3 border border-gray-300 text-gray-700 font-bold rounded-xl bg-transparent hover:bg-gray-50 transition-colors"
+        >
+          Restablecer filtros
+        </button>
+      </div>
+    </aside>
+  );
 };
 
 // ─── Explorar ─────────────────────────────────────────────────────────────────
+
+const FILTROS_INICIALES = {
+  searchTerm: '',
+  universidad: '',
+  carrera: '',
+  edadMin: EDAD_MIN_DEFECTO,
+  edadMax: EDAD_MAX_DEFECTO,
+  genero: 'Indiferente',
+  interesPrincipal: 'Cualquiera',
+  fuma: 'Indiferente',
+  bebe: 'Indiferente',
+  mascotas: 'Indiferente',
+  nivelOrdenMin: 0,
+  nivelRuidoMin: 0,
+  precioMax: PRECIO_MAX_DEFAULT,
+  radioKm: RADIO_KM_DEFAULT,
+  habitacionesMin: 0,
+  tipoHabitacion: 'Cualquiera',
+  tipoBano: 'Cualquiera',
+};
+
 const Explorar = () => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Resultados separados por tipo
-  const [resultadosEstudiantes, setResultadosEstudiantes] = useState([]);
-  const [resultadosViviendas, setResultadosViviendas] = useState([]);
+  const [drawerIsOpen, setDrawerIsOpen] = useState(false);
+
+  const [filtros, setFiltros] = useState({ ...FILTROS_INICIALES });
+
+  const [activarFiltrosPersona, setActivarFiltrosPersona] = useState(true);
+  const [activarFiltrosVivienda, setActivarFiltrosVivienda] = useState(true);
+
+  const [usuariosRaw, setUsuariosRaw] = useState([]);
+  const [alojamientosRaw, setAlojamientosRaw] = useState([]);
+  const [miUbicacion, setMiUbicacion] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // ── Toggles de modo (independientes) ──────────────────────────────────────
-  const [usarFiltrosPersona, setUsarFiltrosPersona] = useState(true);
-  const [usarFiltrosVivienda, setUsarFiltrosVivienda] = useState(false);
-
-  // ── Filtros por persona ────────────────────────────────────────────────────
-  const [soloMismaUniversidad, setSoloMismaUniversidad] = useState(false);
-  const [soloMismaCarrera, setSoloMismaCarrera] = useState(false);
-  const [generoPreferido, setGeneroPreferido] = useState('Indiferente');
-  const [edadMax, setEdadMax] = useState(30);
-  const [fuma, setFuma] = useState(false);
-  const [bebeAlcohol, setBebeAlcohol] = useState('Indiferente');
-  const [interesesSeleccionados, setInteresesSeleccionados] = useState([]);
-
-  // ── Filtros por vivienda ───────────────────────────────────────────────────
-  const [comuna, setComuna] = useState('Todas');
-  const [precioMax, setPrecioMax] = useState(250000);
-  const [distanciaMaxSede, setDistanciaMaxSede] = useState(5);
-
-  const catalogoIntereses = [
-    { id: 1, nombre: 'Fútbol', icono: '⚽' },
-    { id: 2, nombre: 'Calistenia / Gym', icono: '💪' },
-    { id: 3, nombre: 'Hardware & Gaming', icono: '💻' },
-    { id: 4, nombre: 'Básquetbol', icono: '🏀' },
-    { id: 5, nombre: 'Música', icono: '🎸' },
-    { id: 6, nombre: 'Cine y Series', icono: '🎬' },
-    { id: 7, nombre: 'Programación', icono: '🚀' },
-    { id: 8, nombre: 'Cocina', icono: '🍳' },
-    { id: 9, nombre: 'Automovilismo & Tuning', icono: '🚗' },
-    { id: 10, nombre: 'Juegos de Mesa', icono: '🎲' },
-  ];
-
-  const toggleInteres = (nombre) =>
-    setInteresesSeleccionados((prev) =>
-      prev.includes(nombre) ? prev.filter((i) => i !== nombre) : [...prev, nombre]
-    );
-
-  const limpiarFiltros = () => {
-    setSoloMismaUniversidad(false);
-    setSoloMismaCarrera(false);
-    setGeneroPreferido('Indiferente');
-    setEdadMax(30);
-    setFuma(false);
-    setBebeAlcohol('Indiferente');
-    setInteresesSeleccionados([]);
-    setComuna('Todas');
-    setPrecioMax(250000);
-    setDistanciaMaxSede(5);
-  };
-
-  // Contador para forzar re-fetch manual (botón "Aplicar Filtros")
   const [triggerBusqueda, setTriggerBusqueda] = useState(0);
 
   useEffect(() => {
-    // Si ningún modo está activo, no hay nada que buscar
-    if (!usarFiltrosPersona && !usarFiltrosVivienda) return;
-
     let cancelado = false;
 
-    async function doFetch() {
+    async function cargarDatos() {
       const token = getToken();
-
       if (!token) {
-        if (!cancelado) setError('No se encontró el token de autenticación');
+        if (!cancelado) {
+          setError('No se encontró el token de autenticación.');
+        }
         return;
       }
 
@@ -90,82 +1107,240 @@ const Explorar = () => {
         setError(null);
       }
 
-      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
 
       try {
-        const [ests, vivs] = await Promise.all([
-          usarFiltrosPersona
-            ? fetch(`${API_BASE}/api/usuarios`, { headers })
-                .then((r) => { if (!r.ok) throw new Error('Error cargando estudiantes'); return r.json(); })
-                .then((d) => (Array.isArray(d) ? d : []))
-            : Promise.resolve([]),
-          usarFiltrosVivienda
-            ? fetch(`${API_BASE}/api/alojamientos`, { headers })
-                .then((r) => { if (!r.ok) throw new Error('Error cargando viviendas'); return r.json(); })
-                .then((d) => (Array.isArray(d) ? d : []))
-            : Promise.resolve([]),
-        ]);
+        const resUsuarios = await fetch(`${API_BASE}/api/usuarios`, { headers });
+        const resAlojamientos = await fetch(`${API_BASE}/api/alojamientos`, { headers });
+        const resPerfil = await fetch(`${API_BASE}/api/usuarios/mi-perfil`, { headers });
+
+        if (!resUsuarios.ok || !resAlojamientos.ok) {
+          throw new Error('Error al cargar datos de búsqueda.');
+        }
+
+        const dataUsuarios = await resUsuarios.json();
+        const dataAlojamientos = await resAlojamientos.json();
+
+        let miIdLogueado = null;
+
+        if (resPerfil.ok) {
+          const perfil = await resPerfil.json();
+
+          if (perfil?._id) {
+            miIdLogueado = String(perfil._id);
+          } else if (perfil?.id) {
+            miIdLogueado = String(perfil.id);
+          }
+
+          if (!cancelado) {
+            const lat = perfil?.ubicacion_sede?.latitud;
+            const lng = perfil?.ubicacion_sede?.longitud;
+
+            if (lat != null && lng != null) {
+              setMiUbicacion({ latitud: lat, longitud: lng });
+            }
+          }
+        }
+
+        let listaUsuarios = [];
+        if (Array.isArray(dataUsuarios)) {
+          listaUsuarios = dataUsuarios;
+        } else if (Array.isArray(dataUsuarios?.data)) {
+          listaUsuarios = dataUsuarios.data;
+        }
+
+        const usuariosSinPropio = filtrarUsuariosSinPropio(listaUsuarios, miIdLogueado);
+
+        let listaAlojamientos = [];
+        if (Array.isArray(dataAlojamientos)) {
+          listaAlojamientos = dataAlojamientos;
+        } else if (Array.isArray(dataAlojamientos?.data)) {
+          listaAlojamientos = dataAlojamientos.data;
+        }
+
         if (!cancelado) {
-          setResultadosEstudiantes(ests);
-          setResultadosViviendas(vivs);
+          setUsuariosRaw(usuariosSinPropio);
+          setAlojamientosRaw(listaAlojamientos);
         }
       } catch (err) {
-        if (!cancelado) setError(err.message || 'Error desconocido');
+        if (!cancelado) {
+          setError(err.message || 'Error desconocido.');
+        }
       } finally {
-        if (!cancelado) setIsLoading(false);
+        if (!cancelado) {
+          setIsLoading(false);
+        }
       }
     }
 
-    doFetch();
-    return () => { cancelado = true; };
-  }, [usarFiltrosPersona, usarFiltrosVivienda, triggerBusqueda]);
+    cargarDatos();
 
-  const handleAplicarFiltros = () => {
-    setIsFilterOpen(false);
-    setTriggerBusqueda((t) => t + 1);
+    return () => {
+      cancelado = true;
+    };
+  }, [triggerBusqueda]);
+
+  const mapaAlojamientosPorId = useMemo(() => {
+    const mapa = {};
+    for (const aloj of alojamientosRaw) {
+      const id = String(aloj._id || aloj.id);
+      mapa[id] = aloj;
+    }
+    return mapa;
+  }, [alojamientosRaw]);
+
+  const mapaUsuariosPorId = useMemo(() => {
+    const mapa = {};
+    for (const usuario of usuariosRaw) {
+      const id = String(usuario._id || usuario.id);
+      mapa[id] = usuario;
+    }
+    return mapa;
+  }, [usuariosRaw]);
+
+  const resultadosMixtos = useMemo(() => {
+    return construirResultadosMixtos({
+      usuarios: usuariosRaw,
+      alojamientos: alojamientosRaw,
+      mapaAlojamientosPorId,
+      mapaUsuariosPorId,
+      filtros,
+      miUbicacion,
+      activarFiltrosPersona,
+      activarFiltrosVivienda,
+    });
+  }, [
+    usuariosRaw,
+    alojamientosRaw,
+    mapaAlojamientosPorId,
+    mapaUsuariosPorId,
+    filtros,
+    miUbicacion,
+    activarFiltrosPersona,
+    activarFiltrosVivienda,
+  ]);
+
+  let personaActivos = false;
+  if (activarFiltrosPersona) {
+    if (hayFiltrosPersonaActivos(filtros)) {
+      personaActivos = true;
+    }
+  }
+
+  let viviendaActivos = false;
+  if (activarFiltrosVivienda) {
+    if (hayFiltrosViviendaActivos(filtros)) {
+      viviendaActivos = true;
+    }
+  }
+
+  const cruzadoActivos = personaActivos && viviendaActivos;
+
+  const totalFiltrosActivos = (() => {
+    let count = 0;
+    if (personaActivos) {
+      count = count + 1;
+    }
+    if (viviendaActivos) {
+      count = count + 1;
+    }
+    return count;
+  })();
+
+  const abrirDrawer = () => {
+    setDrawerIsOpen(true);
   };
 
-  // ── Filtrado local por searchTerm ──────────────────────────────────────────
-  const estudiantesFiltrados = resultadosEstudiantes.filter((u) =>
-    searchTerm.trim() === '' ||
-    (u.nombre && u.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.universidad && u.universidad.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.carrera && u.carrera.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const cerrarDrawer = () => {
+    setDrawerIsOpen(false);
+  };
 
-  const viviendasFiltradas = resultadosViviendas.filter((a) =>
-    searchTerm.trim() === '' ||
-    (a.titulo && a.titulo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (a.comuna && a.comuna.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (a.direccion && a.direccion.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const limpiarFiltros = () => {
+    setFiltros({ ...FILTROS_INICIALES });
+    setActivarFiltrosPersona(true);
+    setActivarFiltrosVivienda(true);
+  };
 
-  const hayFiltrosActivos =
-    interesesSeleccionados.length > 0 ||
-    generoPreferido !== 'Indiferente' ||
-    soloMismaUniversidad ||
-    soloMismaCarrera ||
-    precioMax !== 250000 ||
-    distanciaMaxSede !== 5 ||
-    fuma ||
-    bebeAlcohol !== 'Indiferente';
+  const contarPersonas = () => {
+    let count = 0;
+    for (const item of resultadosMixtos) {
+      if (item.tipo === 'persona') {
+        count = count + 1;
+      }
+    }
+    return count;
+  };
+
+  const contarViviendas = () => {
+    let count = 0;
+    for (const item of resultadosMixtos) {
+      if (item.tipo === 'vivienda') {
+        count = count + 1;
+      }
+    }
+    return count;
+  };
+
+  const contarCruzados = () => {
+    let count = 0;
+    for (const item of resultadosMixtos) {
+      if (item.esCruzado) {
+        count = count + 1;
+      }
+    }
+    return count;
+  };
+
+  let contenidoDrawer = null;
+  if (drawerIsOpen) {
+    contenidoDrawer = (
+      <>
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+          onClick={cerrarDrawer}
+          aria-hidden="true"
+        />
+        <DrawerFiltros
+          filtros={filtros}
+          setFiltros={setFiltros}
+          onCerrar={cerrarDrawer}
+          onLimpiar={limpiarFiltros}
+          hayPersonaActivos={personaActivos}
+          hayViviendaActivos={viviendaActivos}
+          activarFiltrosPersona={activarFiltrosPersona}
+          setActivarFiltrosPersona={setActivarFiltrosPersona}
+          activarFiltrosVivienda={activarFiltrosVivienda}
+          setActivarFiltrosVivienda={setActivarFiltrosVivienda}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-20">
 
-      {/* HEADER Y BUSCADOR */}
-      <div className="bg-white px-6 pt-8 pb-4 shadow-sm rounded-b-3xl sticky top-0 z-40">
+      <div className="bg-white px-6 pt-8 pb-4 shadow-sm rounded-b-3xl sticky top-0 z-30">
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-blue-900">Explorar</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-blue-900">Buscador</h1>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
+              Filtrado total · Personas + Viviendas
+            </p>
+          </div>
           <button
-            onClick={() => navigate('/dashboard')}
+            type="button"
+            onClick={() => {
+              navigate('/dashboard');
+            }}
             className="text-sm text-blue-600 font-bold hover:underline"
           >
-            Volver
+            ← Volver
           </button>
         </div>
 
-        {/* Barra de búsqueda + filtros */}
         <div className="flex gap-2 mb-3">
           <div className="relative flex-1">
             <svg className="w-5 h-5 absolute left-3 top-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -173,298 +1348,57 @@ const Explorar = () => {
             </svg>
             <input
               type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={
-                usarFiltrosVivienda && !usarFiltrosPersona
-                  ? 'Buscar por título, dirección o comuna...'
-                  : 'Buscar por nombre, universidad o carrera...'
-              }
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              value={filtros.searchTerm}
+              onChange={(e) => {
+                setFiltros({ ...filtros, searchTerm: e.target.value });
+              }}
+              placeholder="Buscar personas, universidades, viviendas..."
+              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
           <button
-            onClick={() => setIsFilterOpen(true)}
-            className="relative p-3 bg-gray-50 border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-100 transition-colors"
+            type="button"
+            onClick={abrirDrawer}
+            className="relative shrink-0 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl text-sm flex items-center gap-2 shadow-md"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
-            {hayFiltrosActivos && (
-              <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white"></span>
+            Filtros
+            {totalFiltrosActivos > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">
+                {totalFiltrosActivos}
+              </span>
             )}
           </button>
         </div>
 
-        {/* ── TOGGLES DE MODO (visibles en la página principal) ── */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setUsarFiltrosPersona((prev) => !prev)}
-            className={`flex-1 py-2.5 rounded-2xl font-bold text-sm border flex items-center justify-center gap-2 transition-all active:scale-95 ${
-              usarFiltrosPersona
-                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            🎒 Estudiantes
-          </button>
-          <button
-            onClick={() => setUsarFiltrosVivienda((prev) => !prev)}
-            className={`flex-1 py-2.5 rounded-2xl font-bold text-sm border flex items-center justify-center gap-2 transition-all active:scale-95 ${
-              usarFiltrosVivienda
-                ? 'bg-green-500 text-white border-green-500 shadow-sm'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            🏠 Viviendas
-          </button>
-        </div>
+        {cruzadoActivos && (
+          <div className="bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-[11px] text-purple-700 font-medium">
+            🔀 Filtro cruzado activo: se combinan criterios de personas y viviendas simultáneamente.
+          </div>
+        )}
       </div>
 
-      {/* ── DRAWER DE FILTROS ───────────────────────────────────────────────── */}
-      {isFilterOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm"
-            onClick={() => setIsFilterOpen(false)}
-          />
-          <div className="fixed top-0 right-0 h-full w-[85vw] max-w-md bg-white z-50 shadow-2xl overflow-y-auto pb-28">
-
-            <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-6 py-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Filtros Avanzados</h2>
-              <button
-                onClick={() => setIsFilterOpen(false)}
-                className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-
-              {/* Indicadores del modo activo dentro del drawer */}
-              <div className="flex gap-2 text-xs font-bold">
-                <span className={`px-3 py-1.5 rounded-xl border ${usarFiltrosPersona ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}>
-                  🎒 Estudiantes {usarFiltrosPersona ? 'ON' : 'OFF'}
-                </span>
-                <span className={`px-3 py-1.5 rounded-xl border ${usarFiltrosVivienda ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-100'}`}>
-                  🏠 Viviendas {usarFiltrosVivienda ? 'ON' : 'OFF'}
-                </span>
-              </div>
-
-              {/* FILTROS POR PERSONA */}
-              {usarFiltrosPersona && (
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🎒</span>
-                    <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">Filtros por Persona</h3>
-                  </div>
-
-                  {/* Exclusividad académica */}
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500 mb-2 block">Exclusividad Académica</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setSoloMismaUniversidad(!soloMismaUniversidad)}
-                        className={`py-2 px-1 border text-[11px] font-bold rounded-xl transition-all ${soloMismaUniversidad ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'}`}
-                      >
-                        {soloMismaUniversidad ? '🎓 Solo mi Universidad' : '🎓 Cualquier U'}
-                      </button>
-                      <button
-                        onClick={() => setSoloMismaCarrera(!soloMismaCarrera)}
-                        className={`py-2 px-1 border text-[11px] font-bold rounded-xl transition-all ${soloMismaCarrera ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'}`}
-                      >
-                        {soloMismaCarrera ? '📚 Solo mi Carrera' : '📚 Cualquier Carrera'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <hr className="border-gray-100" />
-
-                  {/* Género */}
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500 mb-2 block">Preferencia de Género</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['Indiferente', 'Solo Mujeres', 'Solo Hombres', 'Mixto'].map((g) => (
-                        <button
-                          key={g}
-                          onClick={() => setGeneroPreferido(g)}
-                          className={`py-2 px-3 border text-[11px] font-bold rounded-xl transition-all ${generoPreferido === g ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'}`}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Edad máxima */}
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
-                      <span>Edad Máxima</span>
-                      <span className="text-blue-600 font-bold">{edadMax} años</span>
-                    </div>
-                    <input
-                      type="range" min="18" max="40" value={edadMax}
-                      onChange={(e) => setEdadMax(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                  </div>
-
-                  {/* Hábitos */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="text-[11px] font-semibold text-gray-400 block mb-1">¿Fumador?</span>
-                      <button
-                        onClick={() => setFuma(!fuma)}
-                        className={`w-full py-2 border text-[11px] font-bold rounded-xl transition-all ${fuma ? 'border-red-500 bg-red-50 text-red-600' : 'border-gray-200 text-gray-600'}`}
-                      >
-                        {fuma ? '🚬 Permite Humo' : '🚭 Libre de Humo'}
-                      </button>
-                    </div>
-                    <div>
-                      <span className="text-[11px] font-semibold text-gray-400 block mb-1">Alcohol</span>
-                      <select
-                        value={bebeAlcohol} onChange={(e) => setBebeAlcohol(e.target.value)}
-                        className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-[11px] text-gray-700 font-bold focus:outline-none"
-                      >
-                        <option>Indiferente</option>
-                        <option>Nunca</option>
-                        <option>Socialmente</option>
-                        <option>Frecuente</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Intereses */}
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500 mb-2 block">Intereses compartidos</span>
-                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                      {catalogoIntereses.map((interes) => {
-                        const active = interesesSeleccionados.includes(interes.nombre);
-                        return (
-                          <button
-                            key={interes.id}
-                            onClick={() => toggleInteres(interes.nombre)}
-                            className={`flex items-center gap-1 py-1.5 px-2.5 border rounded-xl text-[11px] font-bold transition-all ${active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-gray-200'}`}
-                          >
-                            <span>{interes.icono}</span>
-                            {interes.nombre}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* FILTROS POR VIVIENDA */}
-              {usarFiltrosVivienda && (
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🏠</span>
-                    <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">Filtros por Vivienda</h3>
-                  </div>
-
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500 mb-1.5 block">Sector / Comuna</span>
-                    <select
-                      value={comuna} onChange={(e) => setComuna(e.target.value)}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium text-gray-700 focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="Todas">Todas las comunas</option>
-                      <option value="Valparaiso">Valparaíso</option>
-                      <option value="Curauma">Curauma</option>
-                      <option value="Vina">Viña del Mar</option>
-                      <option value="Quilpue">Quilpué</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-end mb-1">
-                      <span className="text-xs font-semibold text-gray-500">Presupuesto Máximo</span>
-                      <span className="text-sm font-extrabold text-green-600">${precioMax.toLocaleString('es-CL')}</span>
-                    </div>
-                    <input
-                      type="range" min="100000" max="500000" step="10000" value={precioMax}
-                      onChange={(e) => setPrecioMax(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-end mb-1">
-                      <span className="text-xs font-semibold text-gray-500">📍 Distancia a tu Sede</span>
-                      <span className="text-sm font-extrabold text-blue-600">Menos de {distanciaMaxSede} KM</span>
-                    </div>
-                    <input
-                      type="range" min="1" max="25" step="1" value={distanciaMaxSede}
-                      onChange={(e) => setDistanciaMaxSede(Number(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1 font-medium">
-                      Calculado entre la vivienda y la sede universitaria de tu perfil.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Si ningún modo activo */}
-              {!usarFiltrosPersona && !usarFiltrosVivienda && (
-                <div className="bg-gray-50 rounded-2xl p-6 text-center border border-dashed border-gray-200">
-                  <p className="text-sm font-bold text-gray-500">Activa al menos un modo de búsqueda</p>
-                  <p className="text-xs text-gray-400 mt-1">Usa los toggles de la pantalla principal</p>
-                </div>
-              )}
-            </div>
-
-            {/* Acciones del drawer */}
-            <div className="fixed bottom-0 right-0 w-[85vw] max-w-md p-6 bg-white border-t border-gray-100 flex gap-3 z-20">
-              <button
-                onClick={limpiarFiltros}
-                className="flex-1 py-3.5 bg-gray-50 text-gray-600 font-bold rounded-2xl text-sm hover:bg-gray-100 transition-colors border border-gray-100"
-              >
-                Limpiar
-              </button>
-              <button
-                onClick={handleAplicarFiltros}
-                className="flex-[2] py-3.5 bg-blue-600 text-white font-bold rounded-2xl shadow-lg text-sm hover:bg-blue-700 transition-all active:scale-95"
-              >
-                Aplicar Filtros
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── RESULTADOS ─────────────────────────────────────────────────────── */}
-      <div className="p-6 space-y-8">
-
-        {/* Sin modo activo */}
-        {!usarFiltrosPersona && !usarFiltrosVivienda && !isLoading && (
-          <div className="text-center py-16 px-6 bg-white rounded-3xl border border-dashed border-gray-200 shadow-sm">
-            <span className="text-3xl block mb-3">🔍</span>
-            <p className="text-sm font-bold text-gray-700">Selecciona un modo de búsqueda</p>
-            <p className="text-xs text-gray-400 mt-1">Activa "Estudiantes", "Viviendas" o ambos usando los botones de arriba.</p>
-          </div>
-        )}
+      <div className="p-6 space-y-4">
 
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-sm text-gray-600 font-bold">Buscando...</p>
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
+            <p className="text-sm text-gray-600 font-bold">Cargando buscador...</p>
           </div>
         )}
 
-        {error && (
+        {error && !isLoading && (
           <div className="text-center py-8 px-4 bg-red-50 rounded-2xl border border-red-200">
-            <span className="text-2xl block mb-2">❌</span>
-            <p className="text-sm font-bold text-red-700">Error al cargar resultados</p>
-            <p className="text-xs text-red-500 mt-1">{error}</p>
+            <p className="text-sm font-bold text-red-700">{error}</p>
             <button
-              onClick={() => setTriggerBusqueda((t) => t + 1)}
+              type="button"
+              onClick={() => {
+                setTriggerBusqueda((t) => {
+                  return t + 1;
+                });
+              }}
               className="mt-3 text-xs font-bold text-red-600 underline"
             >
               Reintentar
@@ -474,126 +1408,172 @@ const Explorar = () => {
 
         {!isLoading && !error && (
           <>
-            {/* SECCIÓN ESTUDIANTES */}
-            {usarFiltrosPersona && (
-              <section>
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h2 className="text-lg font-extrabold text-gray-900">Estudiantes</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {estudiantesFiltrados.length} {estudiantesFiltrados.length === 1 ? 'resultado' : 'resultados'}
-                    </p>
-                  </div>
-                  {hayFiltrosActivos && (
-                    <span className="text-[10px] font-extrabold bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg uppercase tracking-wide">
-                      Filtros activos
-                    </span>
-                  )}
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-extrabold text-gray-800">
+                {resultadosMixtos.length} resultados
+              </span>
+              <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
+                👤 {contarPersonas()} personas
+              </span>
+              <span className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                🏠 {contarViviendas()} viviendas
+              </span>
+              {cruzadoActivos && (
+                <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded-lg">
+                  🔀 {contarCruzados()} cruzados
+                </span>
+              )}
+            </div>
 
-                {estudiantesFiltrados.length === 0 ? (
-                  <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-200">
-                    <span className="text-2xl block mb-2">🎒</span>
-                    <p className="text-sm font-bold text-gray-500">Sin estudiantes para mostrar</p>
-                    <p className="text-xs text-gray-400 mt-1">Prueba cambiando los filtros</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
-                    {estudiantesFiltrados.map((u, idx) => (
-                      <div
-                        key={u.id || u._id || idx}
-                        onClick={() => navigate(`/usuario/${u._id || u.id}`)}
-                        className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
-                      >
-                        {/* Foto */}
-                        <div className="w-full h-32 bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-                          {u.fotoPerfil || u.fotoPerfilUrl ? (
-                            <img
-                              src={u.fotoPerfil || u.fotoPerfilUrl}
-                              alt={u.nombre}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md">
-                              {u.nombre ? u.nombre.charAt(0).toUpperCase() : '?'}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-3">
-                          <h3 className="font-bold text-sm text-gray-900 truncate">{u.nombre || 'Sin Nombre'}</h3>
-                          <p className="text-[11px] text-blue-700 font-bold truncate mt-0.5">{u.universidad || '—'}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{u.carrera || '—'}</p>
-                          {u.edad && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">{u.edad} años</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+            {resultadosMixtos.length === 0 && (
+              <div className="text-center py-14 bg-white rounded-2xl border border-dashed border-gray-200">
+                <span className="text-4xl block mb-3">🔍</span>
+                <p className="text-sm font-bold text-gray-600">Sin resultados con estos filtros</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+                  Prueba ampliar el precio, quitar el radio o relajar hábitos de convivencia.
+                </p>
+                <button
+                  type="button"
+                  onClick={limpiarFiltros}
+                  className="mt-4 text-xs font-bold text-blue-600 underline"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
             )}
 
-            {/* SECCIÓN VIVIENDAS */}
-            {usarFiltrosVivienda && (
-              <section>
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h2 className="text-lg font-extrabold text-gray-900">Viviendas</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {viviendasFiltradas.length} {viviendasFiltradas.length === 1 ? 'resultado' : 'resultados'}
-                    </p>
-                  </div>
-                </div>
+            {resultadosMixtos.length > 0 && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {resultadosMixtos.map((item, idx) => {
+                  if (item.tipo === 'vivienda') {
+                    const a = item.alojamiento;
+                    const idAloj = a._id || a.id;
+                    const fotoUrl = getImageUrl(a.imagenes?.[0]);
+                    const precioDesde = obtenerPrecioMinimoAlojamiento(a);
+                    const anfitrionNombre = item.anfitrion?.nombre_completo || '';
 
-                {viviendasFiltradas.length === 0 ? (
-                  <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-gray-200">
-                    <span className="text-2xl block mb-2">🏠</span>
-                    <p className="text-sm font-bold text-gray-500">Sin viviendas disponibles</p>
-                    <p className="text-xs text-gray-400 mt-1">Prueba cambiando los filtros</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                    {viviendasFiltradas.map((a, idx) => (
+                    return (
                       <div
-                        key={a.id || a._id || idx}
-                        onClick={() => navigate(`/detalle-vivienda/${a._id || a.id}`)}
+                        key={`viv-${idAloj}-${idx}`}
+                        onClick={() => {
+                          navigate(`/detalle-vivienda/${idAloj}`);
+                        }}
                         className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
                       >
-                        {a.imagenUrl && (
-                          <img
-                            src={a.imagenUrl}
-                            alt={a.titulo}
-                            className="w-full h-36 object-cover"
-                          />
+                        {fotoUrl ? (
+                          <img src={fotoUrl} alt={a.titulo} className="w-full h-36 object-cover" />
+                        ) : (
+                          <div className="w-full h-28 bg-linear-to-br from-green-50 to-blue-50 flex items-center justify-center text-3xl">
+                            🏠
+                          </div>
                         )}
                         <div className="p-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 rounded-lg text-[10px] bg-green-50 text-green-700 font-extrabold uppercase tracking-wider">
-                              {a.comuna || 'Comuna desconocida'}
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            <span className="text-[10px] font-extrabold bg-green-50 text-green-700 px-2 py-0.5 rounded-lg uppercase">
+                              Vivienda
                             </span>
-                          </div>
-                          <h3 className="font-bold text-sm text-gray-900 truncate">{a.titulo || 'Sin título'}</h3>
-                          <p className="text-[11px] text-gray-400 truncate mt-0.5">{a.direccion || 'Dirección no disponible'}</p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-green-600 font-extrabold text-base">
-                              ${a.precio?.toLocaleString('es-CL') || '—'}
-                            </span>
-                            {a.habitaciones && (
-                              <span className="text-[10px] text-gray-400">{a.habitaciones} hab.</span>
+                            {item.esCruzado && (
+                              <span className="text-[10px] font-extrabold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-lg uppercase">
+                                Match cruzado
+                              </span>
+                            )}
+                            {a.comuna && (
+                              <span className="text-[10px] font-bold bg-gray-50 text-gray-600 px-2 py-0.5 rounded-lg">
+                                {a.comuna}
+                              </span>
                             )}
                           </div>
+                          <h3 className="font-bold text-sm text-gray-900 truncate">{a.titulo || 'Sin título'}</h3>
+                          <p className="text-[11px] text-gray-400 truncate mt-0.5">📍 {a.sector || '—'}</p>
+                          {anfitrionNombre && (
+                            <p className="text-[10px] text-blue-600 font-bold mt-1 truncate">Anfitrión: {anfitrionNombre}</p>
+                          )}
+                          {precioDesde > 0 && (
+                            <p className="text-green-600 font-extrabold text-base mt-2">
+                              Desde ${precioDesde.toLocaleString('es-CL')}
+                              <span className="text-gray-400 font-normal text-[10px]">/mes</span>
+                            </p>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                    );
+                  }
+
+                  const u = item.usuario;
+                  const userId = u._id || u.id;
+                  const nombre = u.nombre_completo || 'Sin nombre';
+                  const univ = u.perfil_academico?.universidad || '';
+                  const carr = u.perfil_academico?.carrera || '';
+                  const fotoUrl = getImageUrl(u.foto_perfil || '');
+                  const edad = calcularEdad(u.fecha_nacimiento);
+                  const pref = u.preferencias_convivencia || {};
+                  const precioVinculado = item.alojamiento
+                    ? obtenerPrecioMinimoAlojamiento(item.alojamiento)
+                    : 0;
+
+                  return (
+                    <div
+                      key={`per-${userId}-${idx}`}
+                      onClick={() => {
+                        navigate(`/usuario/${userId}`);
+                      }}
+                      className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
+                    >
+                      <div className="w-full h-32 bg-linear-to-br from-indigo-50 to-purple-50 flex items-center justify-center relative">
+                        {fotoUrl ? (
+                          <img src={fotoUrl} alt={nombre} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-linear-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white text-xl font-bold">
+                            {nombre.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
+                          👤 Persona
+                        </span>
+                        {item.esCruzado && (
+                          <span className="absolute top-2 right-2 bg-purple-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
+                            🔀 Cruzado
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <h3 className="font-bold text-sm text-gray-900 truncate">{nombre}</h3>
+                        {univ && (
+                          <p className="text-[11px] text-blue-700 font-bold truncate mt-0.5">{univ}</p>
+                        )}
+                        {carr && (
+                          <p className="text-[10px] text-gray-400 truncate">{carr}</p>
+                        )}
+                        {edad !== null && (
+                          <p className="text-[10px] text-gray-400">{edad} años</p>
+                        )}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          <span className="text-[9px] bg-gray-50 text-gray-600 font-bold px-1.5 py-0.5 rounded-md">
+                            🚬 {normalizarFuma(pref.fuma)}
+                          </span>
+                          <span className="text-[9px] bg-gray-50 text-gray-600 font-bold px-1.5 py-0.5 rounded-md">
+                            🍷 {normalizarBebe(pref.bebe_alcohol)}
+                          </span>
+                          <span className="text-[9px] bg-gray-50 text-gray-600 font-bold px-1.5 py-0.5 rounded-md">
+                            🐾 {normalizarMascotas(pref.mascotas)}
+                          </span>
+                        </div>
+                        {precioVinculado > 0 && (
+                          <p className="text-[11px] text-green-600 font-bold mt-2">
+                            Ofrece desde ${precioVinculado.toLocaleString('es-CL')}/mes
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </>
         )}
       </div>
+
+      {contenidoDrawer}
     </div>
   );
 };

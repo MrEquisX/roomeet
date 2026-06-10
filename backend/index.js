@@ -22,6 +22,8 @@ const authRoutes = require('./src/routes/auth.routes');
 const alojamientosRoutes = require('./src/routes/alojamientos.routes');
 const solicitudesRoutes = require('./src/routes/solicitudes.routes');
 const favoritosRoutes = require('./src/routes/favoritos.routes');
+const matchesRoutes   = require('./src/routes/matches.routes');
+const chatsRoutes     = require('./src/routes/chats.routes');
 
 const app = express();
 
@@ -47,6 +49,10 @@ app.use('/api/solicitudes', solicitudesRoutes);
 
 // Conectamos el endpoint de Favoritos
 app.use('/api/favoritos', favoritosRoutes);
+
+// Matches (aceptar perfil → chat) y conversaciones
+app.use('/api/matches', matchesRoutes);
+app.use('/api/chats', chatsRoutes);
 
 // Ruta de bienvenida opcional
 app.get('/', (req, res) => {
