@@ -271,6 +271,7 @@ const EstudianteCard = (props) => {
   const matchScore      = props.matchScore;
   const compatibilidad  = props.compatibilidad;
   const navigate        = props.navigate;
+  const Maps            = navigate;
   const miUbicacion     = props.miUbicacion;
   const zIndex          = props.zIndex;
   const usuarioLogueado = props.usuarioLogueado;
@@ -447,12 +448,14 @@ const EstudianteCard = (props) => {
       {/* ── BADGE ROL — esquina superior izquierda ── */}
       {esAnfitrion ? (
         <button
-          onClick={() => {
-            if (viviendaId) {
-              navigate(`/detalle-vivienda/${viviendaId}`);
+          type="button"
+          onClick={(evento) => {
+            evento.stopPropagation();
+            if (estudiante && estudiante.vivienda && estudiante.vivienda._id) {
+              Maps('/detalle-vivienda/' + estudiante.vivienda._id);
             }
           }}
-          className={`absolute top-4 left-4 z-[5] flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white px-3 py-1.5 rounded-2xl font-extrabold text-[11px] border border-purple-400/30 backdrop-blur-sm transition-all ${!viviendaId ? 'pointer-events-none opacity-80' : ''}`}
+          className="absolute top-4 left-4 z-[5] flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white px-3 py-1.5 rounded-2xl font-extrabold text-[11px] border border-purple-400/30 backdrop-blur-sm transition-all cursor-pointer"
         >
           <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
             <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />

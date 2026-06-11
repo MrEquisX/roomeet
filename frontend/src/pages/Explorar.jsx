@@ -8,13 +8,82 @@ const RADIO_KM_DEFAULT = 0;
 const EDAD_MIN_DEFECTO = 17;
 const EDAD_MAX_DEFECTO = 35;
 
-const OPCIONES_INTERES_FILTRO = [
+const OPCIONES_TIPO_VIVIENDA = ['Indiferente', 'Con Vivienda', 'Sin Vivienda'];
+
+const INTERESES = [
   'Fútbol',
   'Gym',
   'Videojuegos',
+  'Básquet',
   'Música',
+  'Cine',
+  'Series',
   'Cocinar',
-  'Mascotas',
+  'Automóviles',
+  'Juegos de Mesa',
+  'Moda',
+  'Shopping',
+  'Running',
+  'Fiesta',
+  'Leer',
+  'Bailar',
+  'Tenis',
+  'Pádel',
+  'Vóley',
+  'Natación',
+  'Disco',
+  'Trekking',
+  'Estudiar',
+  'Viajar',
+  'Dibujar',
+  'Karate',
+  'Judo',
+  'Boxeo',
+];
+
+const HABITOS = [
+  {
+    clave: 'fuma',
+    etiqueta: 'Fuma',
+    opciones: ['Indiferente', 'No', 'Sí', 'Ocasionalmente'],
+  },
+  {
+    clave: 'bebe',
+    etiqueta: 'Bebe alcohol',
+    opciones: ['Indiferente', 'No', 'Sí', 'Ocasionalmente'],
+  },
+  {
+    clave: 'mascotas',
+    etiqueta: 'Mascotas',
+    opciones: ['Indiferente', 'Sí', 'No'],
+  },
+  {
+    clave: 'visitas',
+    etiqueta: 'Visitas de amigos',
+    opciones: ['Indiferente', 'Permitidas', 'Restringidas'],
+  },
+  {
+    clave: 'pareja',
+    etiqueta: 'Pareja a dormir',
+    opciones: ['Indiferente', 'Permitido', 'Restringido'],
+  },
+];
+
+const CARACTERISTICAS_VIVIENDA = [
+  {
+    clave: 'tipoHabitacion',
+    etiqueta: 'Tipo de Habitación',
+    opciones: ['Cualquiera', 'Privada', 'Compartida'],
+  },
+  {
+    clave: 'tipoBano',
+    etiqueta: 'Baño de la pieza',
+    opciones: [
+      'Cualquiera',
+      'Privado (Dentro de la pieza)',
+      'Público/Compartido (Fuera de la pieza)',
+    ],
+  },
 ];
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -73,28 +142,6 @@ const calcularEdad = (fecha) => {
   return edad;
 };
 
-const usuarioTieneInteres = (usuario, interesBuscado) => {
-  const interesesCrudos = usuario.intereses || [];
-  let encontrado = false;
-
-  for (const item of interesesCrudos) {
-    let nombre = null;
-
-    if (typeof item === 'string') {
-      nombre = item;
-    } else if (item && item.nombre) {
-      nombre = item.nombre;
-    }
-
-    if (nombre === interesBuscado) {
-      encontrado = true;
-      break;
-    }
-  }
-
-  return encontrado;
-};
-
 const habitacionCumpleTipo = (habitacion, alojamiento, filtroTipo) => {
   if (filtroTipo === 'Cualquiera') {
     return true;
@@ -147,14 +194,14 @@ const habitacionCumpleBano = (habitacion, filtroBano) => {
 
   const tipoBanoRaw = habitacion.tipoBano || habitacion.bano || '';
 
-  if (filtroBano === 'Privado') {
+  if (filtroBano === 'Privado (Dentro de la pieza)') {
     if (tipoBanoRaw.includes('Privado')) {
       return true;
     }
     return false;
   }
 
-  if (filtroBano === 'Compartido') {
+  if (filtroBano === 'Público/Compartido (Fuera de la pieza)') {
     if (tipoBanoRaw.includes('Compartido')) {
       return true;
     }
@@ -165,6 +212,111 @@ const habitacionCumpleBano = (habitacion, filtroBano) => {
   }
 
   return false;
+};
+
+const extraerNombresInteresesUsuario = (usuario) => {
+  const interesesCrudos = usuario.intereses || [];
+  const nombres = [];
+
+  for (const item of interesesCrudos) {
+    let nombre = null;
+
+    if (typeof item === 'string') {
+      nombre = item;
+    } else if (item && item.nombre) {
+      nombre = item.nombre;
+    }
+
+    if (nombre) {
+      nombres.push(nombre);
+    }
+  }
+
+  return nombres;
+};
+
+const usuarioCumpleInteresesSeleccionados = (usuario, interesesSeleccionados) => {
+  if (!interesesSeleccionados || interesesSeleccionados.length === 0) {
+    return true;
+  }
+
+  const nombresUsuario = extraerNombresInteresesUsuario(usuario);
+
+  for (const interesBuscado of interesesSeleccionados) {
+    let encontrado = false;
+
+    for (const nombre of nombresUsuario) {
+      if (nombre === interesBuscado) {
+        encontrado = true;
+        break;
+      }
+    }
+
+    if (!encontrado) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const obtenerValorVisitas = (usuario) => {
+  const pref = usuario.preferencias_convivencia || usuario.preferencias || {};
+  let valor = pref.visitas_frecuentes;
+
+  if (valor === undefined || valor === null) {
+    valor = pref.visitasFrecuentes;
+  }
+
+  if (valor === true) {
+    return 'Permitidas';
+  }
+
+  if (valor === false) {
+    return 'Restringidas';
+  }
+
+  return 'Restringidas';
+};
+
+const obtenerValorPareja = (usuario) => {
+  const pref = usuario.preferencias_convivencia || usuario.preferencias || {};
+  let valor = pref.acepta_parejas_visita;
+
+  if (valor === undefined || valor === null) {
+    valor = pref.aceptaParejasVisita;
+  }
+
+  if (valor === true) {
+    return 'Permitido';
+  }
+
+  if (valor === false) {
+    return 'Restringido';
+  }
+
+  return 'Restringido';
+};
+
+const enriquecerUsuariosConVivienda = (usuarios, mapaAlojamientosPorId) => {
+  const resultado = [];
+
+  for (const usuario of usuarios) {
+    const usuarioEnriquecido = { ...usuario };
+    let vivienda = null;
+
+    if (usuario.alojamientoId) {
+      const clave = String(usuario.alojamientoId);
+      if (mapaAlojamientosPorId[clave]) {
+        vivienda = mapaAlojamientosPorId[clave];
+      }
+    }
+
+    usuarioEnriquecido.vivienda = vivienda;
+    resultado.push(usuarioEnriquecido);
+  }
+
+  return resultado;
 };
 
 const calcularDistanciaHaversine = (lat1, lon1, lat2, lon2) => {
@@ -350,9 +502,24 @@ const usuarioPasaFiltrosPersona = (usuario, filtros, aplicarFiltrosPersona) => {
     }
   }
 
-  if (filtros.interesPrincipal !== 'Cualquiera') {
-    const tieneInteres = usuarioTieneInteres(usuario, filtros.interesPrincipal);
-    if (!tieneInteres) {
+  const cumpleIntereses = usuarioCumpleInteresesSeleccionados(
+    usuario,
+    filtros.interesesSeleccionados
+  );
+  if (!cumpleIntereses) {
+    return false;
+  }
+
+  if (filtros.visitas !== 'Indiferente') {
+    const visitasUsuario = obtenerValorVisitas(usuario);
+    if (visitasUsuario !== filtros.visitas) {
+      return false;
+    }
+  }
+
+  if (filtros.pareja !== 'Indiferente') {
+    const parejaUsuario = obtenerValorPareja(usuario);
+    if (parejaUsuario !== filtros.pareja) {
       return false;
     }
   }
@@ -360,39 +527,15 @@ const usuarioPasaFiltrosPersona = (usuario, filtros, aplicarFiltrosPersona) => {
   return true;
 };
 
-// ─── Filtrado Viviendas ───────────────────────────────────────────────────────
+// ─── Filtrado de vivienda vinculado a la persona ─────────────────────────────
 
-const alojamientoCoincideTexto = (alojamiento, termino) => {
-  if (!termino.trim()) {
-    return true;
-  }
-  const term = termino.toLowerCase();
-  const titulo = (alojamiento.titulo || '').toLowerCase();
-  const sector = (alojamiento.sector || '').toLowerCase();
-  const comuna = (alojamiento.comuna || '').toLowerCase();
-
-  if (titulo.includes(term)) {
-    return true;
-  }
-  if (sector.includes(term)) {
-    return true;
-  }
-  if (comuna.includes(term)) {
-    return true;
-  }
-  return false;
-};
-
-const alojamientoPasaFiltrosVivienda = (alojamiento, filtros, miUbicacion, aplicarFiltrosVivienda) => {
-  if (!alojamientoCoincideTexto(alojamiento, filtros.searchTerm)) {
+const viviendaPasaFiltrosDetalle = (vivienda, filtros, miUbicacion) => {
+  if (!vivienda) {
     return false;
   }
 
-  if (!aplicarFiltrosVivienda) {
-    return true;
-  }
+  const precioMinimo = obtenerPrecioMinimoAlojamiento(vivienda);
 
-  const precioMinimo = obtenerPrecioMinimoAlojamiento(alojamiento);
   if (filtros.precioMax < PRECIO_MAX_DEFAULT) {
     if (precioMinimo <= 0) {
       return false;
@@ -405,8 +548,8 @@ const alojamientoPasaFiltrosVivienda = (alojamiento, filtros, miUbicacion, aplic
   if (filtros.radioKm > RADIO_KM_DEFAULT && miUbicacion) {
     const miLat = miUbicacion.latitud;
     const miLng = miUbicacion.longitud;
-    const vivLat = alojamiento.latitud;
-    const vivLng = alojamiento.longitud;
+    const vivLat = vivienda.latitud;
+    const vivLng = vivienda.longitud;
 
     if (vivLat == null || vivLng == null) {
       return false;
@@ -419,19 +562,19 @@ const alojamientoPasaFiltrosVivienda = (alojamiento, filtros, miUbicacion, aplic
   }
 
   if (filtros.habitacionesMin > 0) {
-    const disponibles = alojamiento.habitacionesOfrecidas?.length || 0;
+    const disponibles = vivienda.habitacionesOfrecidas?.length || 0;
     if (disponibles < filtros.habitacionesMin) {
       return false;
     }
   }
 
-  const habitaciones = alojamiento.habitacionesOfrecidas || [];
+  const habitaciones = vivienda.habitacionesOfrecidas || [];
 
   if (filtros.tipoHabitacion !== 'Cualquiera') {
     let tieneTipoHabitacion = false;
 
     for (const hab of habitaciones) {
-      const cumple = habitacionCumpleTipo(hab, alojamiento, filtros.tipoHabitacion);
+      const cumple = habitacionCumpleTipo(hab, vivienda, filtros.tipoHabitacion);
       if (cumple) {
         tieneTipoHabitacion = true;
         break;
@@ -457,6 +600,37 @@ const alojamientoPasaFiltrosVivienda = (alojamiento, filtros, miUbicacion, aplic
     if (!tieneBano) {
       return false;
     }
+  }
+
+  return true;
+};
+
+const usuarioPasaFiltroTipoVivienda = (usuario, filtroTipoVivienda, filtros, miUbicacion) => {
+  const tieneVivienda = Boolean(usuario.vivienda);
+
+  if (filtroTipoVivienda === 'Sin Vivienda') {
+    if (tieneVivienda) {
+      return false;
+    }
+    return true;
+  }
+
+  if (filtroTipoVivienda === 'Con Vivienda') {
+    if (!tieneVivienda) {
+      return false;
+    }
+
+    const viviendaCumple = viviendaPasaFiltrosDetalle(
+      usuario.vivienda,
+      filtros,
+      miUbicacion
+    );
+
+    if (!viviendaCumple) {
+      return false;
+    }
+
+    return true;
   }
 
   return true;
@@ -495,13 +669,27 @@ const hayFiltrosPersonaActivos = (filtros) => {
   if (filtros.genero !== 'Indiferente') {
     return true;
   }
-  if (filtros.interesPrincipal !== 'Cualquiera') {
+  if (filtros.interesesSeleccionados && filtros.interesesSeleccionados.length > 0) {
+    return true;
+  }
+  if (filtros.visitas !== 'Indiferente') {
+    return true;
+  }
+  if (filtros.pareja !== 'Indiferente') {
     return true;
   }
   return false;
 };
 
-const hayFiltrosViviendaActivos = (filtros) => {
+const hayFiltrosViviendaActivos = (filtros, filtroTipoVivienda) => {
+  if (filtroTipoVivienda === 'Sin Vivienda') {
+    return true;
+  }
+
+  if (filtroTipoVivienda === 'Indiferente') {
+    return false;
+  }
+
   if (filtros.precioMax < PRECIO_MAX_DEFAULT) {
     return true;
   }
@@ -520,169 +708,41 @@ const hayFiltrosViviendaActivos = (filtros) => {
   return false;
 };
 
-// ─── Resultados mixtos con filtrado cruzado ────────────────────────────────────
+// ─── Motor principal: siempre devuelve personas ───────────────────────────────
 
-const construirResultadosMixtos = (opciones) => {
+const filtrarListaPersonas = (opciones) => {
   const usuarios = opciones.usuarios;
-  const alojamientos = opciones.alojamientos;
-  const mapaAlojamientosPorId = opciones.mapaAlojamientosPorId;
-  const mapaUsuariosPorId = opciones.mapaUsuariosPorId;
   const filtros = opciones.filtros;
+  const filtroTipoVivienda = opciones.filtroTipoVivienda;
   const miUbicacion = opciones.miUbicacion;
-  const activarFiltrosPersona = opciones.activarFiltrosPersona;
-  const activarFiltrosVivienda = opciones.activarFiltrosVivienda;
 
-  let filtrosPersonaActivos = false;
-  if (activarFiltrosPersona) {
-    if (hayFiltrosPersonaActivos(filtros)) {
-      filtrosPersonaActivos = true;
-    }
-  }
+  const personasFiltradas = [];
 
-  let filtrosViviendaActivos = false;
-  if (activarFiltrosVivienda) {
-    if (hayFiltrosViviendaActivos(filtros)) {
-      filtrosViviendaActivos = true;
-    }
-  }
-
-  const usuariosQuePasanPersona = [];
   for (const usuario of usuarios) {
-    const pasa = usuarioPasaFiltrosPersona(usuario, filtros, activarFiltrosPersona);
-    if (pasa) {
-      usuariosQuePasanPersona.push(usuario);
-    }
-  }
+    const pasaPersona = usuarioPasaFiltrosPersona(usuario, filtros, true);
 
-  const alojamientosQuePasanVivienda = [];
-  for (const alojamiento of alojamientos) {
-    const pasa = alojamientoPasaFiltrosVivienda(
-      alojamiento,
-      filtros,
-      miUbicacion,
-      activarFiltrosVivienda
-    );
-    if (pasa) {
-      alojamientosQuePasanVivienda.push(alojamiento);
-    }
-  }
-
-  const idsAlojamientosIncluidos = new Set();
-  const itemsMixtos = [];
-
-  for (const alojamiento of alojamientosQuePasanVivienda) {
-    const idAloj = String(alojamiento._id || alojamiento.id);
-    idsAlojamientosIncluidos.add(idAloj);
-
-    let anfitrion = null;
-    if (alojamiento.id_anfitrion) {
-      anfitrion = mapaUsuariosPorId[String(alojamiento.id_anfitrion)] || null;
-    }
-
-    if (filtrosPersonaActivos && anfitrion) {
-      const anfitrionPasa = usuarioPasaFiltrosPersona(anfitrion, filtros, activarFiltrosPersona);
-      if (!anfitrionPasa) {
-        continue;
-      }
-    }
-
-    let esCruzado = false;
-    if (filtrosPersonaActivos && filtrosViviendaActivos) {
-      esCruzado = true;
-    }
-
-    itemsMixtos.push({
-      tipo: 'vivienda',
-      esCruzado,
-      alojamiento,
-      anfitrion,
-    });
-  }
-
-  for (const usuario of usuariosQuePasanPersona) {
-    const userId = String(usuario._id || usuario.id);
-    const esAnfitrion = usuario.rol === 'Anfitrion';
-    const alojamientoId = usuario.alojamientoId
-      ? String(usuario.alojamientoId)
-      : null;
-
-    if (filtrosViviendaActivos && esAnfitrion && alojamientoId) {
-      const alojamiento = mapaAlojamientosPorId[alojamientoId] || null;
-      if (!alojamiento) {
-        continue;
-      }
-      const viviendaPasa = alojamientoPasaFiltrosVivienda(
-        alojamiento,
-        filtros,
-        miUbicacion,
-        activarFiltrosVivienda
-      );
-      if (!viviendaPasa) {
-        continue;
-      }
-      if (idsAlojamientosIncluidos.has(alojamientoId)) {
-        continue;
-      }
-    }
-
-    if (filtrosViviendaActivos && esAnfitrion && !alojamientoId) {
+    if (!pasaPersona) {
       continue;
     }
 
-    let esCruzado = false;
-    if (filtrosPersonaActivos && filtrosViviendaActivos && esAnfitrion) {
-      esCruzado = true;
+    const pasaVivienda = usuarioPasaFiltroTipoVivienda(
+      usuario,
+      filtroTipoVivienda,
+      filtros,
+      miUbicacion
+    );
+
+    if (!pasaVivienda) {
+      continue;
     }
 
-    itemsMixtos.push({
-      tipo: 'persona',
-      esCruzado,
-      usuario,
-      alojamiento: alojamientoId
-        ? mapaAlojamientosPorId[alojamientoId] || null
-        : null,
-    });
+    personasFiltradas.push(usuario);
   }
 
-  return itemsMixtos;
+  return personasFiltradas;
 };
 
 // ─── Drawer de filtros ────────────────────────────────────────────────────────
-
-const ToggleCategoria = (props) => {
-  const activo = props.activo;
-  const alCambiar = props.alCambiar;
-  const etiqueta = props.etiqueta;
-
-  let claseFondo = 'bg-gray-200';
-  let claseCirculo = 'translate-x-0.5';
-
-  if (activo) {
-    claseFondo = 'bg-blue-600';
-    claseCirculo = 'translate-x-5';
-  }
-
-  let claseBoton = 'relative w-11 h-6 rounded-full transition-colors shrink-0 ';
-  claseBoton = claseBoton + claseFondo;
-
-  let claseCirculoCompleto = 'absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full shadow transition-transform ';
-  claseCirculoCompleto = claseCirculoCompleto + claseCirculo;
-
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={activo}
-      aria-label={etiqueta}
-      onClick={() => {
-        alCambiar(!activo);
-      }}
-      className={claseBoton}
-    >
-      <span className={claseCirculoCompleto} />
-    </button>
-  );
-};
 
 const DrawerFiltros = (props) => {
   const filtros = props.filtros;
@@ -691,19 +751,144 @@ const DrawerFiltros = (props) => {
   const onLimpiar = props.onLimpiar;
   const hayPersonaActivos = props.hayPersonaActivos;
   const hayViviendaActivos = props.hayViviendaActivos;
-  const activarFiltrosPersona = props.activarFiltrosPersona;
-  const setActivarFiltrosPersona = props.setActivarFiltrosPersona;
-  const activarFiltrosVivienda = props.activarFiltrosVivienda;
-  const setActivarFiltrosVivienda = props.setActivarFiltrosVivienda;
+  const filtroTipoVivienda = props.filtroTipoVivienda;
+  const setFiltroTipoVivienda = props.setFiltroTipoVivienda;
 
-  let claseContenedorPersona = 'space-y-4';
-  if (!activarFiltrosPersona) {
-    claseContenedorPersona = claseContenedorPersona + ' opacity-50 pointer-events-none';
-  }
+  const alternarInteres = (interesNombre) => {
+    const actuales = filtros.interesesSeleccionados || [];
+    let nuevos = [];
+
+    let yaSeleccionado = false;
+    for (const item of actuales) {
+      if (item === interesNombre) {
+        yaSeleccionado = true;
+        break;
+      }
+    }
+
+    if (yaSeleccionado) {
+      for (const item of actuales) {
+        if (item !== interesNombre) {
+          nuevos.push(item);
+        }
+      }
+    } else {
+      nuevos = [...actuales, interesNombre];
+    }
+
+    setFiltros({
+      ...filtros,
+      interesesSeleccionados: nuevos,
+    });
+  };
 
   let claseContenedorVivienda = 'space-y-4';
-  if (!activarFiltrosVivienda) {
-    claseContenedorVivienda = claseContenedorVivienda + ' opacity-50 pointer-events-none';
+  if (filtroTipoVivienda !== 'Con Vivienda') {
+    claseContenedorVivienda = claseContenedorVivienda + ' opacity-40 pointer-events-none';
+  }
+
+  const opcionesTipoVivienda = [];
+  for (const opcion of OPCIONES_TIPO_VIVIENDA) {
+    opcionesTipoVivienda.push(
+      <option key={opcion} value={opcion}>
+        {opcion}
+      </option>
+    );
+  }
+
+  const selectsHabitos = [];
+  for (const habito of HABITOS) {
+    const opcionesHabito = [];
+    for (const opcion of habito.opciones) {
+      opcionesHabito.push(
+        <option key={`${habito.clave}-${opcion}`} value={opcion}>
+          {opcion}
+        </option>
+      );
+    }
+
+    selectsHabitos.push(
+      <div key={habito.clave}>
+        <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">
+          {habito.etiqueta}
+        </label>
+        <select
+          value={filtros[habito.clave]}
+          onChange={(e) => {
+            const nuevosFiltros = { ...filtros };
+            nuevosFiltros[habito.clave] = e.target.value;
+            setFiltros(nuevosFiltros);
+          }}
+          className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+        >
+          {opcionesHabito}
+        </select>
+      </div>
+    );
+  }
+
+  const checkboxesIntereses = [];
+  for (const interes of INTERESES) {
+    let marcado = false;
+    const seleccionados = filtros.interesesSeleccionados || [];
+
+    for (const item of seleccionados) {
+      if (item === interes) {
+        marcado = true;
+        break;
+      }
+    }
+
+    let claseCheckbox = 'px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all ';
+    if (marcado) {
+      claseCheckbox = claseCheckbox + 'bg-blue-600 text-white border-blue-600';
+    } else {
+      claseCheckbox = claseCheckbox + 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100';
+    }
+
+    checkboxesIntereses.push(
+      <button
+        key={interes}
+        type="button"
+        onClick={() => {
+          alternarInteres(interes);
+        }}
+        className={claseCheckbox}
+      >
+        {interes}
+      </button>
+    );
+  }
+
+  const selectsCaracteristicas = [];
+  for (const caracteristica of CARACTERISTICAS_VIVIENDA) {
+    const opcionesCaracteristica = [];
+    for (const opcion of caracteristica.opciones) {
+      opcionesCaracteristica.push(
+        <option key={`${caracteristica.clave}-${opcion}`} value={opcion}>
+          {opcion}
+        </option>
+      );
+    }
+
+    selectsCaracteristicas.push(
+      <div key={caracteristica.clave}>
+        <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">
+          {caracteristica.etiqueta}
+        </label>
+        <select
+          value={filtros[caracteristica.clave]}
+          onChange={(e) => {
+            const nuevosFiltros = { ...filtros };
+            nuevosFiltros[caracteristica.clave] = e.target.value;
+            setFiltros(nuevosFiltros);
+          }}
+          className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+        >
+          {opcionesCaracteristica}
+        </select>
+      </div>
+    );
   }
 
   return (
@@ -711,7 +896,7 @@ const DrawerFiltros = (props) => {
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Filtros</h2>
-          <p className="text-[11px] text-gray-400">Personas + Viviendas combinables</p>
+          <p className="text-[11px] text-gray-400">Personas con criterios de vivienda relacionales</p>
         </div>
         <button
           type="button"
@@ -730,21 +915,14 @@ const DrawerFiltros = (props) => {
             <h3 className="text-xs font-extrabold text-blue-600 uppercase tracking-widest">
               Personas
             </h3>
-            <div className="flex items-center gap-2 shrink-0">
-              {hayPersonaActivos && (
-                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">
-                  Activos
-                </span>
-              )}
-              <ToggleCategoria
-                activo={activarFiltrosPersona}
-                alCambiar={setActivarFiltrosPersona}
-                etiqueta="Activar filtros de personas"
-              />
-            </div>
+            {hayPersonaActivos && (
+              <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg">
+                Activos
+              </span>
+            )}
           </div>
 
-          <div className={claseContenedorPersona}>
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Universidad</label>
@@ -818,71 +996,13 @@ const DrawerFiltros = (props) => {
             </div>
 
             <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Interés Principal</label>
-              <select
-                value={filtros.interesPrincipal}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, interesPrincipal: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Cualquiera">Cualquiera</option>
-                {OPCIONES_INTERES_FILTRO.map((interes) => {
-                  return (
-                    <option key={interes} value={interes}>
-                      {interes}
-                    </option>
-                  );
-                })}
-              </select>
+              <label className="text-[11px] font-semibold text-gray-400 mb-2 block uppercase">Intereses</label>
+              <div className="flex flex-wrap gap-2">
+                {checkboxesIntereses}
+              </div>
             </div>
 
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Fuma</label>
-              <select
-                value={filtros.fuma}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, fuma: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Indiferente">Indiferente</option>
-                <option value="No">No fuma</option>
-                <option value="Sí">Sí fuma</option>
-                <option value="Ocasionalmente">Ocasionalmente</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Bebe alcohol</label>
-              <select
-                value={filtros.bebe}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, bebe: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Indiferente">Indiferente</option>
-                <option value="No">No</option>
-                <option value="Sí">Sí</option>
-                <option value="Ocasionalmente">Ocasionalmente</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Mascotas</label>
-              <select
-                value={filtros.mascotas}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, mascotas: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Indiferente">Indiferente</option>
-                <option value="Sí">Sí</option>
-                <option value="No">No</option>
-              </select>
-            </div>
+            {selectsHabitos}
 
             <div>
               <div className="flex justify-between mb-1">
@@ -931,18 +1051,26 @@ const DrawerFiltros = (props) => {
             <h3 className="text-xs font-extrabold text-green-600 uppercase tracking-widest">
               Viviendas
             </h3>
-            <div className="flex items-center gap-2 shrink-0">
-              {hayViviendaActivos && (
-                <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded-lg">
-                  Activos
-                </span>
-              )}
-              <ToggleCategoria
-                activo={activarFiltrosVivienda}
-                alCambiar={setActivarFiltrosVivienda}
-                etiqueta="Activar filtros de viviendas"
-              />
-            </div>
+            {hayViviendaActivos && (
+              <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded-lg">
+                Activos
+              </span>
+            )}
+          </div>
+
+          <div className="mb-4">
+            <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">
+              Tipo de búsqueda de vivienda
+            </label>
+            <select
+              value={filtroTipoVivienda}
+              onChange={(e) => {
+                setFiltroTipoVivienda(e.target.value);
+              }}
+              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium"
+            >
+              {opcionesTipoVivienda}
+            </select>
           </div>
 
           <div className={claseContenedorVivienda}>
@@ -1005,35 +1133,7 @@ const DrawerFiltros = (props) => {
               />
             </div>
 
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Tipo de Habitación</label>
-              <select
-                value={filtros.tipoHabitacion}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, tipoHabitacion: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Cualquiera">Cualquiera</option>
-                <option value="Privada">Privada</option>
-                <option value="Compartida">Compartida</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold text-gray-400 mb-1 block uppercase">Baño</label>
-              <select
-                value={filtros.tipoBano}
-                onChange={(e) => {
-                  setFiltros({ ...filtros, tipoBano: e.target.value });
-                }}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-              >
-                <option value="Cualquiera">Cualquiera</option>
-                <option value="Privado">Privado</option>
-                <option value="Compartido">Compartido</option>
-              </select>
-            </div>
+            {selectsCaracteristicas}
           </div>
         </section>
       </div>
@@ -1060,10 +1160,12 @@ const FILTROS_INICIALES = {
   edadMin: EDAD_MIN_DEFECTO,
   edadMax: EDAD_MAX_DEFECTO,
   genero: 'Indiferente',
-  interesPrincipal: 'Cualquiera',
+  interesesSeleccionados: [],
   fuma: 'Indiferente',
   bebe: 'Indiferente',
   mascotas: 'Indiferente',
+  visitas: 'Indiferente',
+  pareja: 'Indiferente',
   nivelOrdenMin: 0,
   nivelRuidoMin: 0,
   precioMax: PRECIO_MAX_DEFAULT,
@@ -1073,15 +1175,14 @@ const FILTROS_INICIALES = {
   tipoBano: 'Cualquiera',
 };
 
-const Explorar = () => {
+const Explorar = (props) => {
   const navigate = useNavigate();
 
   const [drawerIsOpen, setDrawerIsOpen] = useState(false);
 
   const [filtros, setFiltros] = useState({ ...FILTROS_INICIALES });
 
-  const [activarFiltrosPersona, setActivarFiltrosPersona] = useState(true);
-  const [activarFiltrosVivienda, setActivarFiltrosVivienda] = useState(true);
+  const [filtroTipoVivienda, setFiltroTipoVivienda] = useState('Indiferente');
 
   const [usuariosRaw, setUsuariosRaw] = useState([]);
   const [alojamientosRaw, setAlojamientosRaw] = useState([]);
@@ -1192,52 +1293,28 @@ const Explorar = () => {
     return mapa;
   }, [alojamientosRaw]);
 
-  const mapaUsuariosPorId = useMemo(() => {
-    const mapa = {};
-    for (const usuario of usuariosRaw) {
-      const id = String(usuario._id || usuario.id);
-      mapa[id] = usuario;
-    }
-    return mapa;
-  }, [usuariosRaw]);
+  const usuariosEnriquecidos = useMemo(() => {
+    return enriquecerUsuariosConVivienda(usuariosRaw, mapaAlojamientosPorId);
+  }, [usuariosRaw, mapaAlojamientosPorId]);
 
-  const resultadosMixtos = useMemo(() => {
-    return construirResultadosMixtos({
-      usuarios: usuariosRaw,
-      alojamientos: alojamientosRaw,
-      mapaAlojamientosPorId,
-      mapaUsuariosPorId,
+  const personasFiltradas = useMemo(() => {
+    return filtrarListaPersonas({
+      usuarios: usuariosEnriquecidos,
       filtros,
+      filtroTipoVivienda,
       miUbicacion,
-      activarFiltrosPersona,
-      activarFiltrosVivienda,
     });
-  }, [
-    usuariosRaw,
-    alojamientosRaw,
-    mapaAlojamientosPorId,
-    mapaUsuariosPorId,
-    filtros,
-    miUbicacion,
-    activarFiltrosPersona,
-    activarFiltrosVivienda,
-  ]);
+  }, [usuariosEnriquecidos, filtros, filtroTipoVivienda, miUbicacion]);
 
   let personaActivos = false;
-  if (activarFiltrosPersona) {
-    if (hayFiltrosPersonaActivos(filtros)) {
-      personaActivos = true;
-    }
+  if (hayFiltrosPersonaActivos(filtros)) {
+    personaActivos = true;
   }
 
   let viviendaActivos = false;
-  if (activarFiltrosVivienda) {
-    if (hayFiltrosViviendaActivos(filtros)) {
-      viviendaActivos = true;
-    }
+  if (hayFiltrosViviendaActivos(filtros, filtroTipoVivienda)) {
+    viviendaActivos = true;
   }
-
-  const cruzadoActivos = personaActivos && viviendaActivos;
 
   const totalFiltrosActivos = (() => {
     let count = 0;
@@ -1260,38 +1337,7 @@ const Explorar = () => {
 
   const limpiarFiltros = () => {
     setFiltros({ ...FILTROS_INICIALES });
-    setActivarFiltrosPersona(true);
-    setActivarFiltrosVivienda(true);
-  };
-
-  const contarPersonas = () => {
-    let count = 0;
-    for (const item of resultadosMixtos) {
-      if (item.tipo === 'persona') {
-        count = count + 1;
-      }
-    }
-    return count;
-  };
-
-  const contarViviendas = () => {
-    let count = 0;
-    for (const item of resultadosMixtos) {
-      if (item.tipo === 'vivienda') {
-        count = count + 1;
-      }
-    }
-    return count;
-  };
-
-  const contarCruzados = () => {
-    let count = 0;
-    for (const item of resultadosMixtos) {
-      if (item.esCruzado) {
-        count = count + 1;
-      }
-    }
-    return count;
+    setFiltroTipoVivienda('Indiferente');
   };
 
   let contenidoDrawer = null;
@@ -1310,10 +1356,8 @@ const Explorar = () => {
           onLimpiar={limpiarFiltros}
           hayPersonaActivos={personaActivos}
           hayViviendaActivos={viviendaActivos}
-          activarFiltrosPersona={activarFiltrosPersona}
-          setActivarFiltrosPersona={setActivarFiltrosPersona}
-          activarFiltrosVivienda={activarFiltrosVivienda}
-          setActivarFiltrosVivienda={setActivarFiltrosVivienda}
+          filtroTipoVivienda={filtroTipoVivienda}
+          setFiltroTipoVivienda={setFiltroTipoVivienda}
         />
       </>
     );
@@ -1327,7 +1371,7 @@ const Explorar = () => {
           <div>
             <h1 className="text-2xl font-bold text-blue-900">Buscador</h1>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-0.5">
-              Filtrado total · Personas + Viviendas
+              Lista de personas · Vivienda relacional
             </p>
           </div>
           <button
@@ -1352,7 +1396,7 @@ const Explorar = () => {
               onChange={(e) => {
                 setFiltros({ ...filtros, searchTerm: e.target.value });
               }}
-              placeholder="Buscar personas, universidades, viviendas..."
+              placeholder="Buscar personas, universidades, carreras..."
               className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -1373,9 +1417,14 @@ const Explorar = () => {
           </button>
         </div>
 
-        {cruzadoActivos && (
-          <div className="bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-[11px] text-purple-700 font-medium">
-            🔀 Filtro cruzado activo: se combinan criterios de personas y viviendas simultáneamente.
+        {filtroTipoVivienda !== 'Indiferente' && (
+          <div className="bg-green-50 border border-green-100 rounded-xl px-3 py-2 text-[11px] text-green-700 font-medium">
+            {filtroTipoVivienda === 'Con Vivienda' && (
+              <span>🏠 Mostrando solo personas que ofrecen vivienda según los criterios seleccionados.</span>
+            )}
+            {filtroTipoVivienda === 'Sin Vivienda' && (
+              <span>👤 Mostrando solo personas sin vivienda registrada.</span>
+            )}
           </div>
         )}
       </div>
@@ -1410,22 +1459,21 @@ const Explorar = () => {
           <>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-extrabold text-gray-800">
-                {resultadosMixtos.length} resultados
+                {personasFiltradas.length} personas
               </span>
-              <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
-                👤 {contarPersonas()} personas
-              </span>
-              <span className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded-lg">
-                🏠 {contarViviendas()} viviendas
-              </span>
-              {cruzadoActivos && (
-                <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded-lg">
-                  🔀 {contarCruzados()} cruzados
+              {filtroTipoVivienda === 'Con Vivienda' && (
+                <span className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                  🏠 Con vivienda
+                </span>
+              )}
+              {filtroTipoVivienda === 'Sin Vivienda' && (
+                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
+                  Sin vivienda
                 </span>
               )}
             </div>
 
-            {resultadosMixtos.length === 0 && (
+            {personasFiltradas.length === 0 && (
               <div className="text-center py-14 bg-white rounded-2xl border border-dashed border-gray-200">
                 <span className="text-4xl block mb-3">🔍</span>
                 <p className="text-sm font-bold text-gray-600">Sin resultados con estos filtros</p>
@@ -1442,74 +1490,22 @@ const Explorar = () => {
               </div>
             )}
 
-            {resultadosMixtos.length > 0 && (
+            {personasFiltradas.length > 0 && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {resultadosMixtos.map((item, idx) => {
-                  if (item.tipo === 'vivienda') {
-                    const a = item.alojamiento;
-                    const idAloj = a._id || a.id;
-                    const fotoUrl = getImageUrl(a.imagenes?.[0]);
-                    const precioDesde = obtenerPrecioMinimoAlojamiento(a);
-                    const anfitrionNombre = item.anfitrion?.nombre_completo || '';
+                {personasFiltradas.map((usuario, idx) => {
+                  const userId = usuario._id || usuario.id;
+                  const nombre = usuario.nombre_completo || 'Sin nombre';
+                  const univ = usuario.perfil_academico?.universidad || '';
+                  const carr = usuario.perfil_academico?.carrera || '';
+                  const fotoUrl = getImageUrl(usuario.foto_perfil || '');
+                  const edad = calcularEdad(usuario.fecha_nacimiento);
+                  const pref = usuario.preferencias_convivencia || {};
+                  const vivienda = usuario.vivienda;
+                  let precioVinculado = 0;
 
-                    return (
-                      <div
-                        key={`viv-${idAloj}-${idx}`}
-                        onClick={() => {
-                          navigate(`/detalle-vivienda/${idAloj}`);
-                        }}
-                        className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
-                      >
-                        {fotoUrl ? (
-                          <img src={fotoUrl} alt={a.titulo} className="w-full h-36 object-cover" />
-                        ) : (
-                          <div className="w-full h-28 bg-linear-to-br from-green-50 to-blue-50 flex items-center justify-center text-3xl">
-                            🏠
-                          </div>
-                        )}
-                        <div className="p-4">
-                          <div className="flex flex-wrap gap-1.5 mb-2">
-                            <span className="text-[10px] font-extrabold bg-green-50 text-green-700 px-2 py-0.5 rounded-lg uppercase">
-                              Vivienda
-                            </span>
-                            {item.esCruzado && (
-                              <span className="text-[10px] font-extrabold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-lg uppercase">
-                                Match cruzado
-                              </span>
-                            )}
-                            {a.comuna && (
-                              <span className="text-[10px] font-bold bg-gray-50 text-gray-600 px-2 py-0.5 rounded-lg">
-                                {a.comuna}
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="font-bold text-sm text-gray-900 truncate">{a.titulo || 'Sin título'}</h3>
-                          <p className="text-[11px] text-gray-400 truncate mt-0.5">📍 {a.sector || '—'}</p>
-                          {anfitrionNombre && (
-                            <p className="text-[10px] text-blue-600 font-bold mt-1 truncate">Anfitrión: {anfitrionNombre}</p>
-                          )}
-                          {precioDesde > 0 && (
-                            <p className="text-green-600 font-extrabold text-base mt-2">
-                              Desde ${precioDesde.toLocaleString('es-CL')}
-                              <span className="text-gray-400 font-normal text-[10px]">/mes</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
+                  if (vivienda) {
+                    precioVinculado = obtenerPrecioMinimoAlojamiento(vivienda);
                   }
-
-                  const u = item.usuario;
-                  const userId = u._id || u.id;
-                  const nombre = u.nombre_completo || 'Sin nombre';
-                  const univ = u.perfil_academico?.universidad || '';
-                  const carr = u.perfil_academico?.carrera || '';
-                  const fotoUrl = getImageUrl(u.foto_perfil || '');
-                  const edad = calcularEdad(u.fecha_nacimiento);
-                  const pref = u.preferencias_convivencia || {};
-                  const precioVinculado = item.alojamiento
-                    ? obtenerPrecioMinimoAlojamiento(item.alojamiento)
-                    : 0;
 
                   return (
                     <div
@@ -1530,9 +1526,9 @@ const Explorar = () => {
                         <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
                           👤 Persona
                         </span>
-                        {item.esCruzado && (
-                          <span className="absolute top-2 right-2 bg-purple-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
-                            🔀 Cruzado
+                        {vivienda && (
+                          <span className="absolute top-2 right-2 bg-green-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
+                            🏠 Ofrece vivienda
                           </span>
                         )}
                       </div>

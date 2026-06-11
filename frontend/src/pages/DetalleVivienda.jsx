@@ -3,6 +3,17 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
+import { API_BASE } from '../utils/perfilHelpers';
+
+const getImageUrl = (ruta) => {
+  if (!ruta) {
+    return null;
+  }
+  if (ruta.startsWith('http')) {
+    return ruta;
+  }
+  return `${API_BASE}${ruta}`;
+};
 
 // Icono personalizado para Leaflet
 const customIcon = new Icon({
@@ -22,12 +33,12 @@ const MapRecenter = ({ lat, lng }) => {
   return null;
 };
 
-const DetalleVivienda = () => {
-  const { id } = useParams();
+const DetalleVivienda = (props) => {
+  const params = useParams();
+  const id = params.id;
   const navigate = useNavigate();
 
-  // Estado para el Carrusel de Imágenes
-  const [imagenActiva, setImagenActiva] = useState(0);
+  const [indiceFotoActual, setIndiceFotoActual] = useState(0);
 
   // Estado para los datos reales del alojamiento
   const [vivienda, setVivienda] = useState(null);
@@ -64,6 +75,56 @@ const DetalleVivienda = () => {
 
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (vivienda) {
+      setIndiceFotoActual(0);
+    }
+  }, [vivienda]);
+
+  const obtenerFotosVivienda = () => {
+    if (!vivienda) {
+      return [];
+    }
+    if (vivienda.fotos && vivienda.fotos.length > 0) {
+      return vivienda.fotos;
+    }
+    if (vivienda.imagenes && vivienda.imagenes.length > 0) {
+      return vivienda.imagenes;
+    }
+    return [];
+  };
+
+  const fotoAnterior = () => {
+    const fotos = obtenerFotosVivienda();
+    let nuevoIndice = 0;
+
+    if (indiceFotoActual === 0) {
+      nuevoIndice = fotos.length - 1;
+    } else {
+      nuevoIndice = indiceFotoActual - 1;
+    }
+
+    setIndiceFotoActual(nuevoIndice);
+  };
+
+  const fotoSiguiente = () => {
+    const fotos = obtenerFotosVivienda();
+    const ultimoIndice = fotos.length - 1;
+    let nuevoIndice = 0;
+
+    if (indiceFotoActual === ultimoIndice) {
+      nuevoIndice = 0;
+    } else {
+      nuevoIndice = indiceFotoActual + 1;
+    }
+
+    setIndiceFotoActual(nuevoIndice);
+  };
+
+  const irAFoto = (indice) => {
+    setIndiceFotoActual(indice);
+  };
 
   // Postulación/contactar: crea la solicitud y navega al chat usando el ID devuelto por el backend
   const handleContactar = async () => {
@@ -126,6 +187,89 @@ const DetalleVivienda = () => {
     );
   }
 
+  const fotos = obtenerFotosVivienda();
+
+  let mostrarFlechasCarrusel = false;
+  if (fotos.length > 1) {
+    mostrarFlechasCarrusel = true;
+  }
+
+  let urlFotoPrincipal = null;
+  if (fotos.length > 0) {
+    const rutaFoto = fotos[indiceFotoActual];
+    urlFotoPrincipal = getImageUrl(rutaFoto);
+  }
+
+  let textoIndicadorFotos = '';
+  if (fotos.length > 0) {
+    const numeroActual = indiceFotoActual + 1;
+    const totalFotos = fotos.length;
+    textoIndicadorFotos = `${numeroActual} / ${totalFotos}`;
+  }
+
+  let bloqueFlechasCarrusel = null;
+  if (mostrarFlechasCarrusel) {
+    bloqueFlechasCarrusel = (
+      <>
+        <button
+          type="button"
+          onClick={fotoAnterior}
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/40 hover:bg-black/60 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+          aria-label="Foto anterior"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={fotoSiguiente}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/40 hover:bg-black/60 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+          aria-label="Foto siguiente"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </>
+    );
+  }
+
+  const puntosCarrusel = [];
+  for (let idx = 0; idx < fotos.length; idx = idx + 1) {
+    let clasePunto = 'w-2 h-2 rounded-full transition-all shadow-sm bg-white/50';
+    if (indiceFotoActual === idx) {
+      clasePunto = 'w-4 h-2 rounded-full transition-all shadow-sm bg-white';
+    }
+
+    puntosCarrusel.push(
+      <button
+        key={idx}
+        type="button"
+        onClick={() => irAFoto(idx)}
+        className={clasePunto}
+        aria-label={`Ir a foto ${idx + 1}`}
+      />
+    );
+  }
+
+  let bloqueImagenCarrusel = null;
+  if (urlFotoPrincipal) {
+    bloqueImagenCarrusel = (
+      <img
+        src={urlFotoPrincipal}
+        alt={`Foto ${indiceFotoActual + 1}`}
+        className="w-full h-full object-cover"
+      />
+    );
+  } else {
+    bloqueImagenCarrusel = (
+      <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm font-medium">
+        Sin fotos disponibles
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative">
       
@@ -137,23 +281,22 @@ const DetalleVivienda = () => {
       </div>
 
       {/* 1. CARRUSEL DE IMÁGENES */}
-      <div className="relative w-full h-72 md:h-96 bg-gray-200 overflow-hidden">
-        <img 
-          src={vivienda.imagenes?.[imagenActiva] || '/sinimagen.jpg'} 
-          alt={`Foto ${imagenActiva + 1}`} 
-          className="w-full h-full object-cover animate-in fade-in duration-300"
-        />
-        
-        {/* Puntos del Carrusel */}
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 z-10">
-          {(vivienda.imagenes || []).map((_, idx) => (
-            <button 
-              key={idx} 
-              onClick={() => setImagenActiva(idx)}
-              className={`w-2 h-2 rounded-full transition-all shadow-sm ${imagenActiva === idx ? 'bg-white w-4' : 'bg-white/50'}`}
-            />
-          ))}
-        </div>
+      <div className="relative w-full h-64 md:h-96 bg-zinc-200 rounded-lg overflow-hidden">
+        {bloqueImagenCarrusel}
+        {bloqueFlechasCarrusel}
+
+        {fotos.length > 0 && (
+          <div className="absolute bottom-4 left-0 right-0 z-10 flex flex-col items-center gap-2">
+            <span className="bg-black/50 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">
+              {textoIndicadorFotos}
+            </span>
+            {fotos.length > 1 && (
+              <div className="flex justify-center gap-2">
+                {puntosCarrusel}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* CONTENEDOR PRINCIPAL BLANCO (Sube un poco sobre la imagen) */}

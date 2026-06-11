@@ -667,6 +667,22 @@ const obtenerPerfilPublico = async (req, res) => {
 
         const conv = usuario.preferencias_convivencia || {};
 
+        let vivienda = null;
+        if (usuario.alojamientoId) {
+            const alojamiento = await Alojamiento.findById(usuario.alojamientoId).lean();
+            if (alojamiento) {
+                vivienda = {
+                    _id:                   alojamiento._id,
+                    titulo:                alojamiento.titulo || '',
+                    sector:                alojamiento.sector || '',
+                    comuna:                alojamiento.comuna || '',
+                    tipoPropiedad:         alojamiento.tipoPropiedad || '',
+                    imagenes:              alojamiento.imagenes || [],
+                    habitacionesOfrecidas: alojamiento.habitacionesOfrecidas || [],
+                };
+            }
+        }
+
         const perfilPublico = {
             _id:           usuario._id,
             nombre,
@@ -678,6 +694,8 @@ const obtenerPerfilPublico = async (req, res) => {
             carrera:       usuario.perfil_academico?.carrera     || '',
             sede:          usuario.perfil_academico?.sede        || '',
             anio_ingreso:  usuario.perfil_academico?.anio_ingreso || null,
+            alojamientoId: usuario.alojamientoId || null,
+            vivienda,
             preferencias: {
                 fuma:             normalizarFumaRespuesta(conv.fuma),
                 mascotas:         normalizarMascotasRespuesta(conv.mascotas),
@@ -686,6 +704,7 @@ const obtenerPerfilPublico = async (req, res) => {
                 bebeAlcohol:      normalizarBebeRespuesta(conv.bebe_alcohol),
                 horarioPreferido: conv.horario_preferido || 'Indiferente',
             },
+            filtros: usuario.filtros || {},
             intereses: (usuario.intereses || []).map((i) => {
                 if (typeof i === 'string') {
                     return { nombre: i, icono: '⭐' };
