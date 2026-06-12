@@ -29,6 +29,8 @@ const corsOptions = {
     origin: [
         'https://roomeet-owsw.vercel.app',
         'http://localhost:5173',
+        'http://localhost',
+        'capacitor://localhost',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],

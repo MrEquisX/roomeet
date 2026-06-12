@@ -72,6 +72,22 @@ export const obtenerIconoInteres = (nombreInteres) => {
   return '🏷️';
 };
 
+const esIconoInteresGenerico = (icono) => {
+  if (!icono) {
+    return true;
+  }
+
+  if (icono === '⭐') {
+    return true;
+  }
+
+  if (icono === '🏷️') {
+    return true;
+  }
+
+  return false;
+};
+
 export const normalizarInteresParaVista = (interes) => {
   let nombre = '';
   let icono = null;
@@ -80,13 +96,19 @@ export const normalizarInteresParaVista = (interes) => {
     nombre = interes;
   } else if (interes && interes.nombre) {
     nombre = interes.nombre;
+
     if (interes.icono) {
       icono = interes.icono;
     }
   }
 
-  if (!icono && nombre) {
-    icono = obtenerIconoInteres(nombre);
+  if (nombre) {
+    const iconoDesdeMapa = obtenerIconoInteres(nombre);
+    const iconoEsGenerico = esIconoInteresGenerico(icono);
+
+    if (iconoEsGenerico) {
+      icono = iconoDesdeMapa;
+    }
   }
 
   if (!icono) {
@@ -95,7 +117,7 @@ export const normalizarInteresParaVista = (interes) => {
 
   return {
     nombre: nombre,
-    icono:  icono,
+    icono: icono,
   };
 };
 

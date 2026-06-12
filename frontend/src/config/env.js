@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_DESARROLLO = 'http://localhost:3000';
+const DEFAULT_API_BASE_PRODUCCION = 'https://roomeet-backend.onrender.com';
 
 const esModoProduccion = import.meta.env.PROD;
 
@@ -28,9 +29,10 @@ const apiBaseDesdeEntorno = normalizarUrlBase(viteApiBase);
 if (apiBaseDesdeEntorno.length > 0) {
   apiBase = apiBaseDesdeEntorno;
 } else if (esModoProduccion) {
-  apiBase = '';
-  console.error(
-    '[ROOMEET] VITE_API_BASE no está definida. Configúrala en Vercel antes del build.'
+  apiBase = DEFAULT_API_BASE_PRODUCCION;
+  console.warn(
+    '[ROOMEET] VITE_API_BASE no definida en el build. Usando backend Render por defecto:',
+    apiBase
   );
 }
 

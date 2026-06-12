@@ -462,14 +462,17 @@ const PerfilPublico = (props) => {
             )}
             {intereses.map((interes, index) => {
               const interesNormalizado = normalizarInteresParaVista(interes);
+              const nombreInteres = interesNormalizado.nombre;
+              const iconoInteres = interesNormalizado.icono;
+              const claveInteres = nombreInteres + '-' + String(index);
 
               return (
                 <span
-                  key={index}
+                  key={claveInteres}
                   className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl text-xs font-bold text-gray-700 border border-gray-200 shadow-sm"
                 >
-                  <span>{interesNormalizado.icono}</span>
-                  {interesNormalizado.nombre}
+                  <span>{iconoInteres}</span>
+                  {nombreInteres}
                 </span>
               );
             })}

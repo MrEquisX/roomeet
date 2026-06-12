@@ -205,9 +205,7 @@ const obtenerMiPerfil = async (req, res) => {
                 horarioPreferido: conv.horario_preferido || 'Indiferente',
             },
             filtros: usuario.filtros || {},
-            intereses: (usuario.intereses || []).map((i) =>
-                typeof i === 'string' ? { nombre: i, icono: '⭐' } : i
-            ),
+            intereses: usuario.intereses || [],
             // Coordenadas del campus — necesarias para el cálculo de distancia en el frontend
             ubicacion_sede: {
                 latitud:   usuario.ubicacion_sede?.latitud   ?? null,
@@ -907,12 +905,7 @@ const obtenerPerfilPublico = async (req, res) => {
                 horarioPreferido: conv.horario_preferido || 'Indiferente',
             },
             filtros: usuario.filtros || {},
-            intereses: (usuario.intereses || []).map((i) => {
-                if (typeof i === 'string') {
-                    return { nombre: i, icono: '⭐' };
-                }
-                return i;
-            }),
+            intereses: usuario.intereses || [],
         };
 
         return res.status(200).json(perfilPublico);
