@@ -23,6 +23,7 @@ export const apiClient = {
     const config = {
       ...options,
       headers,
+      credentials: 'include',
     };
     if (isFormData) {
       // Eliminar 'Content-Type' si está, para que el navegador lo maneje correctamente
@@ -35,7 +36,7 @@ export const apiClient = {
       // Si la sesión expiró (401), limpiar y redirigir
       if (response.status === 401) {
         localStorage.removeItem('token');
-        window.location.href = '/login';
+        window.location.hash = '#/login';
         return null;
       }
 

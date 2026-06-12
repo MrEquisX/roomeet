@@ -25,3 +25,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ignorar compilaciones y ejecutables
+frontend/release/
+frontend/dist/
+node_modules/

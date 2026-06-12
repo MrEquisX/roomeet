@@ -115,7 +115,12 @@ const Conversacion = () => {
     }
 
     const token = localStorage.getItem('token');
-    socketRef.current = io(SOCKET_URL, { auth: { token } });
+    socketRef.current = io(SOCKET_URL, {
+      auth: {
+        token: token,
+      },
+      withCredentials: true,
+    });
     socketRef.current.emit('joinChat', id);
 
     socketRef.current.on('nuevoMensaje', (mensajeRecibido) => {

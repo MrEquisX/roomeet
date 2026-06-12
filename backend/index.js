@@ -25,20 +25,21 @@ const favoritosRoutes = require('./src/routes/favoritos.routes');
 const matchesRoutes   = require('./src/routes/matches.routes');
 const chatsRoutes     = require('./src/routes/chats.routes');
 
+const corsOptions = {
+    origin: [
+        'https://roomeet-owsw.vercel.app',
+        'http://localhost:5173',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 const app = express();
 
-let frontendOrigin = 'http://localhost:5173';
+console.log('[CORS] Orígenes autorizados:', corsOptions.origin.join(', '));
 
-if (process.env.FRONTEND_URL) {
-  frontendOrigin = process.env.FRONTEND_URL;
-}
-
-// Configuración de CORS — solo el origen del frontend autorizado
-app.use(cors({
-  origin: frontendOrigin,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true,
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Servir imágenes subidas: GET /uploads/perfiles/... o /uploads/alojamientos/...
@@ -80,20 +81,19 @@ const startServer = async () => {
         // 2. Crea un servidor HTTP envolviendo la app de Express
         const server = http.createServer(app);
 
-        // 3. Inicializa Socket.io pasando el server
+        // 3. Inicializa Socket.io con las mismas opciones CORS que Express
         const io = new Server(server, {
-            cors: {
-                origin: frontendOrigin,
-                methods: ['GET', 'POST'],
-            },
+            cors: corsOptions,
         });
 
         // 4. Middleware de autenticación: rechaza conexiones sin token válido
         io.use((socket, next) => {
             const token = socket.handshake.auth?.token;
+
             if (!token) {
                 return next(new Error('Acceso denegado: se requiere un token de autenticación.'));
             }
+
             try {
                 socket.usuario = jwt.verify(token, process.env.JWT_SECRET);
                 next();
@@ -115,7 +115,7 @@ const startServer = async () => {
             });
         });
 
-        // 5. Cambia de app.listen a server.listen
+        // 6. Arranque del servidor HTTP + WebSockets
         server.listen(PORT, () => {
             console.log(`🚀 Servidor de Roomeet corriendo en http://localhost:${PORT}`);
             console.log(`🪢 Socket.io corriendo en http://localhost:${PORT}`);
