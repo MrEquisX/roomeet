@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
-import { apiClient } from '../services/apiClient'; // NUEVO: importar apiClient
+import { apiClient } from '../services/apiClient';
+import { API_BASE, API_URL } from '../config/env.js';
 
 // 1. CONFIGURACIÓN DEL MAPA
 const customIcon = new Icon({
@@ -36,10 +37,13 @@ const MapRecenter = ({ lat, lng }) => {
   return null;
 };
 
-const API_BASE = 'http://localhost:3000';
 const getImageUrl = (ruta) => {
-  if (!ruta) return null;
-  if (ruta.startsWith('http')) return ruta;
+  if (!ruta) {
+    return null;
+  }
+  if (ruta.startsWith('http')) {
+    return ruta;
+  }
   return `${API_BASE}${ruta}`;
 };
 
@@ -98,7 +102,7 @@ const AnadirVivienda = () => {
       setCargandoPrecarga(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${API_BASE}/api/alojamientos/${paramId}`, {
+        const res = await fetch(`${API_URL}/alojamientos/${paramId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('No se pudo cargar la vivienda.');

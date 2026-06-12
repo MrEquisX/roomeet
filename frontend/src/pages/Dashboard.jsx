@@ -2,9 +2,8 @@ import TinderCard from 'react-tinder-card';
 import { useEffect, useState, createRef, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
-import { calcularAfinidad } from '../utils/perfilHelpers';
-
-const API_BASE = 'http://localhost:3000';
+import { calcularAfinidad, normalizarInteresParaVista } from '../utils/perfilHelpers';
+import { API_BASE } from '../config/env.js';
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -104,6 +103,49 @@ const filtrarMatchesSinUsuarioPropio = (itemsMatches, miId) => {
   });
 };
 
+const obtenerPuntuacionItemMatch = (item, perfilLogueado) => {
+  if (!item) {
+    return 0;
+  }
+
+  if (item.matchScore !== null && item.matchScore !== undefined) {
+    return Number(item.matchScore);
+  }
+
+  if (item.porcentajeAfinidad !== null && item.porcentajeAfinidad !== undefined) {
+    return Number(item.porcentajeAfinidad);
+  }
+
+  const usuarioItem = item.usuario;
+
+  if (perfilLogueado && usuarioItem) {
+    return calcularAfinidad(perfilLogueado, usuarioItem);
+  }
+
+  return 0;
+};
+
+const ordenarMatchesPorAfinidad = (itemsMatches, perfilLogueado) => {
+  const copiaMatches = [...itemsMatches];
+
+  copiaMatches.sort(function compararPorAfinidad(itemA, itemB) {
+    const afinidadA = obtenerPuntuacionItemMatch(itemA, perfilLogueado);
+    const afinidadB = obtenerPuntuacionItemMatch(itemB, perfilLogueado);
+
+    if (afinidadA > afinidadB) {
+      return 1;
+    }
+
+    if (afinidadA < afinidadB) {
+      return -1;
+    }
+
+    return 0;
+  });
+
+  return copiaMatches;
+};
+
 const etiquetaFuma = (valor) => {
   if (valor === 'Sí' || valor === true) {
     return 'Fuma: Sí';
@@ -136,24 +178,25 @@ const etiquetaMascotas = (valor) => {
 
 const extraerInteresesTarjeta = (estudiante) => {
   const crudos = estudiante?.intereses || [];
-  const nombres = [];
+  const items = [];
 
   for (const item of crudos) {
-    if (typeof item === 'string') {
-      nombres.push(item);
-    } else if (item && item.nombre) {
-      nombres.push(item.nombre);
+    const normalizado = normalizarInteresParaVista(item);
+
+    if (normalizado.nombre) {
+      items.push(normalizado);
     }
-    if (nombres.length >= 5) {
+
+    if (items.length >= 5) {
       break;
     }
   }
 
-  while (nombres.length < 5) {
-    nombres.push(null);
+  while (items.length < 5) {
+    items.push(null);
   }
 
-  return nombres.slice(0, 5);
+  return items.slice(0, 5);
 };
 
 const extraerNombresIntereses = (perfil) => {
@@ -238,6 +281,44 @@ const leerSwipeados = () => {
 };
 
 /**
+ * Limpia el registro de perfiles ya deslizados en localStorage.
+ */
+const limpiarSwipeados = () => {
+  try {
+    localStorage.removeItem('swiped_users');
+  } catch {
+    // Si localStorage no está disponible, omitir silenciosamente
+  }
+};
+
+/**
+ * Procesa la respuesta de la API de matches y devuelve el arreglo ordenado listo para el mazo.
+ */
+const procesarRespuestaMatches = (respuesta, perfilLogueado, miIdLogueado) => {
+  let itemsMatches = [];
+
+  if (respuesta === null) {
+    itemsMatches = [];
+  } else if (Array.isArray(respuesta)) {
+    itemsMatches = respuesta;
+  } else if (respuesta && Array.isArray(respuesta.data)) {
+    itemsMatches = respuesta.data;
+  }
+
+  const idsSwipeados = leerSwipeados();
+  const matchesSinSwipeados = filtrarMatchesSinSwipeados(itemsMatches, idsSwipeados);
+  const matchesSinPropio = filtrarMatchesSinUsuarioPropio(matchesSinSwipeados, miIdLogueado);
+  let matchesOrdenados = ordenarMatchesPorAfinidad(matchesSinPropio, perfilLogueado);
+
+  if (matchesOrdenados.length === 0 && itemsMatches.length > 0) {
+    const matchesRescateSinPropio = filtrarMatchesSinUsuarioPropio(itemsMatches, miIdLogueado);
+    matchesOrdenados = ordenarMatchesPorAfinidad(matchesRescateSinPropio, perfilLogueado);
+  }
+
+  return matchesOrdenados;
+};
+
+/**
  * Añade el _id de un usuario al array de swipeados en localStorage.
  * No inserta duplicados. Si localStorage falla, el error se silencia
  * para no interrumpir el flujo de swipe.
@@ -313,7 +394,13 @@ const EstudianteCard = (props) => {
   );
   const userId      = estudiante?._id || estudiante?.id;
   const nombre      = estudiante?.nombre_completo || estudiante?.nombre || 'Estudiante';
-  const esAnfitrion = estudiante?.rol === 'Anfitrion';
+  const objetoVivienda = estudiante?.vivienda || null;
+  let tieneObjetoVivienda = false;
+
+  if (objetoVivienda !== null && objetoVivienda !== undefined) {
+    tieneObjetoVivienda = true;
+  }
+
   const coordsVivienda = obtenerCoordsVivienda(estudiante);
   const viviendaId =
     coordsVivienda.id ||
@@ -445,14 +532,16 @@ const EstudianteCard = (props) => {
       {/* ── GRADIENTE OSCURO ── */}
       <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/20 to-transparent pointer-events-none z-[2]" />
 
-      {/* ── BADGE ROL — esquina superior izquierda ── */}
-      {esAnfitrion ? (
+      {/* ── BADGE VIVIENDA — esquina superior izquierda ── */}
+      {tieneObjetoVivienda ? (
         <button
           type="button"
           onClick={(evento) => {
             evento.stopPropagation();
-            if (estudiante && estudiante.vivienda && estudiante.vivienda._id) {
-              Maps('/detalle-vivienda/' + estudiante.vivienda._id);
+            if (objetoVivienda && objetoVivienda._id) {
+              Maps('/detalle-vivienda/' + objetoVivienda._id);
+            } else if (objetoVivienda && objetoVivienda.id) {
+              Maps('/detalle-vivienda/' + objetoVivienda.id);
             }
           }}
           className="absolute top-4 left-4 z-[5] flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white px-3 py-1.5 rounded-2xl font-extrabold text-[11px] border border-purple-400/30 backdrop-blur-sm transition-all cursor-pointer"
@@ -467,7 +556,7 @@ const EstudianteCard = (props) => {
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          Busca Vivienda
+          Buscando alojamiento
         </div>
       )}
 
@@ -490,14 +579,14 @@ const EstudianteCard = (props) => {
             e.stopPropagation();
           }}
         >
-          <h2 className="text-xl font-extrabold leading-tight drop-shadow-sm">
+          <h2 className="text-xl font-extrabold leading-tight drop-shadow-sm text-white">
             {nombre}
             {edad ? `, ${edad}` : ''}
           </h2>
         </Link>
 
         {carrera && (
-          <p className="text-sm text-white/85 mt-0.5 truncate">{carrera}</p>
+          <p className="text-sm text-gray-200 mt-0.5 truncate">{carrera}</p>
         )}
 
         {universidad && (
@@ -532,8 +621,8 @@ const EstudianteCard = (props) => {
 
         {/* Exactamente 5 intereses — semáforo vs. usuario logueado */}
         <div className="flex flex-nowrap gap-1 mt-2 overflow-hidden">
-          {interesesTarjeta.map((interes, idx) => {
-            if (!interes) {
+          {interesesTarjeta.map((interesItem, idx) => {
+            if (!interesItem) {
               return (
                 <span
                   key={`vacío-${idx}`}
@@ -544,11 +633,14 @@ const EstudianteCard = (props) => {
               );
             }
 
+            const nombreInteres = interesItem.nombre;
+            const iconoInteres = interesItem.icono;
+
             let estaCompartido = false;
 
             if (usuarioLogueado && interesesLogueado.length > 0) {
               for (const itemLogueado of interesesLogueado) {
-                if (itemLogueado === interes) {
+                if (itemLogueado === nombreInteres) {
                   estaCompartido = true;
                   break;
                 }
@@ -569,11 +661,12 @@ const EstudianteCard = (props) => {
 
             return (
               <span
-                key={`${interes}-${idx}`}
+                key={`${nombreInteres}-${idx}`}
                 className={claseInteres}
-                title={interes}
+                title={nombreInteres}
               >
-                {interes}
+                <span>{iconoInteres}</span>
+                {nombreInteres}
               </span>
             );
           })}
@@ -584,13 +677,14 @@ const EstudianteCard = (props) => {
 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-const Dashboard = () => {
+const Dashboard = (props) => {
   const [estudiantesAfines, setEstudiantesAfines] = useState([]);
   const [cargando, setCargando]           = useState(true);
   const [avatarUrl, setAvatarUrl]         = useState(null);
   const [avatarInicial, setAvatarInicial] = useState('');
   const [miUbicacion, setMiUbicacion]     = useState(null);
   const [miPerfil, setMiPerfil]             = useState(null);
+  const [mazoCompletado, setMazoCompletado] = useState(false);
 
   // Índice de la tarjeta que está en la cima del mazo.
   // -1 = mazo vacío / todas las tarjetas ya fueron deslizadas.
@@ -601,14 +695,65 @@ const Dashboard = () => {
   const currentIndexRef       = useRef(-1);
   const swipeEnProgresoRef    = useRef(false);
   const longitudMatchesPrevRef = useRef(0);
+  const miPerfilRef           = useRef(null);
+  const miIdRef               = useRef(null);
+  const longitudEstudiantesRef = useRef(0);
 
-  // Una ref por tarjeta para poder disparar swipes programáticos desde los botones.
-  // Se recrea solo cuando cambia la cantidad de matches cargados.
+  useEffect(() => {
+    miPerfilRef.current = miPerfil;
+  }, [miPerfil]);
+
+  useEffect(() => {
+    longitudEstudiantesRef.current = estudiantesAfines.length;
+  }, [estudiantesAfines.length]);
+
+  const cargarMatches = async (perfilLogueado, miIdLogueado) => {
+    setCargando(true);
+
+    try {
+      const respuesta = await apiClient.get('/usuarios/matches');
+      const matchesOrdenados = procesarRespuestaMatches(respuesta, perfilLogueado, miIdLogueado);
+      setMazoCompletado(false);
+      setEstudiantesAfines(matchesOrdenados);
+    } catch (error) {
+      if (error && error.response && error.response.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+      } else if (error && error.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+      } else {
+        console.error('Error al cargar matches:', error);
+        setEstudiantesAfines([]);
+      }
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const handleVolverABuscarPerfiles = async () => {
+    limpiarSwipeados();
+
+    let perfilLogueado = miPerfilRef.current;
+    let miIdLogueado = miIdRef.current;
+
+    await cargarMatches(perfilLogueado, miIdLogueado);
+  };
+
+  // Refs limitadas a la ventana DOM (máx. 10 tarjetas físicas).
   const childRefs = useMemo(() => {
     const refs = [];
-    for (let i = 0; i < estudiantesAfines.length; i++) {
+    const limiteCartasDom = 10;
+    let cantidadRefs = estudiantesAfines.length;
+
+    if (cantidadRefs > limiteCartasDom) {
+      cantidadRefs = limiteCartasDom;
+    }
+
+    for (let i = 0; i < cantidadRefs; i++) {
       refs.push(createRef());
     }
+
     return refs;
   }, [estudiantesAfines.length]);
 
@@ -645,9 +790,12 @@ const Dashboard = () => {
 
   // Swipe derecha (Aceptar) → registrar match y habilitar chat
   const handleSwipe = (direction, cardIndex, cardUserId) => {
-    if (cardIndex !== currentIndexRef.current) {
+    const indiceSuperiorEsperado = longitudEstudiantesRef.current - 1;
+
+    if (cardIndex !== indiceSuperiorEsperado) {
       return;
     }
+
     if (direction === 'right') {
       if (cardUserId) {
         agregarMatchChat(cardUserId);
@@ -655,15 +803,53 @@ const Dashboard = () => {
     }
   };
 
-  // ── Llamado cuando la tarjeta sale de pantalla — persiste y avanza el mazo ─
+  // ── Llamado cuando la tarjeta sale de pantalla — persiste y elimina del mazo ─
   const handleCardLeftScreen = (direction, cardIndex, cardUserId) => {
-    setCurrentIndex((prevIndex) => {
-      if (cardIndex !== prevIndex) {
-        return prevIndex;
+    const indiceSuperiorEsperado = longitudEstudiantesRef.current - 1;
+
+    if (cardIndex !== indiceSuperiorEsperado) {
+      return;
+    }
+
+    guardarSwipeEnMemoria(cardUserId);
+
+    setEstudiantesAfines(function actualizarEstudiantesTrasSwipe(prevEstudiantes) {
+      const nuevosEstudiantes = [];
+      let idSwipeStr = '';
+
+      if (cardUserId) {
+        idSwipeStr = String(cardUserId);
       }
-      guardarSwipeEnMemoria(cardUserId);
-      const nuevoIndice = prevIndex - 1;
-      return nuevoIndice;
+
+      for (let i = 0; i < prevEstudiantes.length; i++) {
+        const item = prevEstudiantes[i];
+        const usuarioItem = item.usuario;
+        let idItem = null;
+
+        if (usuarioItem && usuarioItem._id) {
+          idItem = String(usuarioItem._id);
+        } else if (usuarioItem && usuarioItem.id) {
+          idItem = String(usuarioItem.id);
+        }
+
+        let esElSwipeado = false;
+
+        if (idSwipeStr.length > 0 && idItem !== null) {
+          if (idItem === idSwipeStr) {
+            esElSwipeado = true;
+          }
+        }
+
+        if (!esElSwipeado) {
+          nuevosEstudiantes.push(item);
+        }
+      }
+
+      if (nuevosEstudiantes.length === 0) {
+        setMazoCompletado(true);
+      }
+
+      return nuevosEstudiantes;
     });
   };
 
@@ -673,32 +859,41 @@ const Dashboard = () => {
       return;
     }
 
-    const indiceSuperior = currentIndexRef.current;
+    const indiceSuperiorGlobal = longitudEstudiantesRef.current - 1;
 
-    if (indiceSuperior < 0) {
-      return;
-    }
-    if (indiceSuperior >= estudiantesAfines.length) {
+    if (indiceSuperiorGlobal < 0) {
       return;
     }
 
-    const itemActivo = estudiantesAfines[indiceSuperior];
+    const itemActivo = estudiantesAfines[indiceSuperiorGlobal];
     const usuarioActivo = itemActivo?.usuario;
-    const idUsuarioActivo =
-      usuarioActivo?._id ||
-      usuarioActivo?.id ||
-      null;
+    let idUsuarioActivo = null;
+
+    if (usuarioActivo && usuarioActivo._id) {
+      idUsuarioActivo = usuarioActivo._id;
+    } else if (usuarioActivo && usuarioActivo.id) {
+      idUsuarioActivo = usuarioActivo.id;
+    }
+
+    let cantidadVentana = estudiantesAfines.length;
+    const limiteCartasDom = 10;
+
+    if (cantidadVentana > limiteCartasDom) {
+      cantidadVentana = limiteCartasDom;
+    }
+
+    const indiceSuperiorVentana = cantidadVentana - 1;
 
     swipeEnProgresoRef.current = true;
 
     try {
-      const refDeLaTarjeta = childRefs[indiceSuperior];
+      const refDeLaTarjeta = childRefs[indiceSuperiorVentana];
 
       if (refDeLaTarjeta && refDeLaTarjeta.current) {
         await refDeLaTarjeta.current.swipe(direction);
       } else {
-        handleSwipe(direction, indiceSuperior, idUsuarioActivo);
-        handleCardLeftScreen(direction, indiceSuperior, idUsuarioActivo);
+        handleSwipe(direction, indiceSuperiorGlobal, idUsuarioActivo);
+        handleCardLeftScreen(direction, indiceSuperiorGlobal, idUsuarioActivo);
       }
     } finally {
       swipeEnProgresoRef.current = false;
@@ -708,68 +903,48 @@ const Dashboard = () => {
   useEffect(() => {
     const inicializarDashboard = async () => {
       let miIdLogueado = null;
+      let perfilLogueado = null;
 
       try {
-        const perfil = await apiClient.get('/usuarios/mi-perfil');
-        setMiPerfil(perfil);
+        const respuestaPerfil = await apiClient.get('/usuarios/mi-perfil');
+        perfilLogueado = respuestaPerfil;
+        setMiPerfil(respuestaPerfil);
 
-        if (perfil?._id) {
-          miIdLogueado = String(perfil._id);
-        } else if (perfil?.id) {
-          miIdLogueado = String(perfil.id);
+        if (respuestaPerfil && respuestaPerfil._id) {
+          miIdLogueado = String(respuestaPerfil._id);
+        } else if (respuestaPerfil && respuestaPerfil.id) {
+          miIdLogueado = String(respuestaPerfil.id);
         }
 
-        if (perfil?.fotoPerfilUrl) {
-          setAvatarUrl(getImageUrl(perfil.fotoPerfilUrl));
+        miIdRef.current = miIdLogueado;
+
+        if (respuestaPerfil && respuestaPerfil.fotoPerfilUrl) {
+          setAvatarUrl(getImageUrl(respuestaPerfil.fotoPerfilUrl));
         } else {
-          setAvatarInicial((perfil?.nombre || '?')[0].toUpperCase());
+          const inicial = respuestaPerfil && respuestaPerfil.nombre ? respuestaPerfil.nombre[0].toUpperCase() : '?';
+          setAvatarInicial(inicial);
         }
 
-        const lat = perfil?.ubicacion_sede?.latitud;
-        const lng = perfil?.ubicacion_sede?.longitud;
+        if (respuestaPerfil && respuestaPerfil.ubicacion_sede) {
+          const lat = respuestaPerfil.ubicacion_sede.latitud;
+          const lng = respuestaPerfil.ubicacion_sede.longitud;
 
-        if (lat && lng) {
-          setMiUbicacion({ latitud: lat, longitud: lng });
+          if (lat && lng) {
+            setMiUbicacion({ latitud: lat, longitud: lng });
+          }
         }
       } catch {
         // avatar y ubicación no son críticos — la app sigue funcionando
       }
 
-      setCargando(true);
-
-      try {
-        const respuesta = await apiClient.get('/usuarios/matches');
-
-        let itemsMatches = [];
-        if (Array.isArray(respuesta)) {
-          itemsMatches = respuesta;
-        } else if (Array.isArray(respuesta?.data)) {
-          itemsMatches = respuesta.data;
-        }
-
-        const idsSwipeados = leerSwipeados();
-        const matchesSinSwipeados = filtrarMatchesSinSwipeados(itemsMatches, idsSwipeados);
-        const matchesSinPropio = filtrarMatchesSinUsuarioPropio(matchesSinSwipeados, miIdLogueado);
-
-        setEstudiantesAfines(matchesSinPropio);
-      } catch (error) {
-        if (error?.response?.status === 401 || error?.status === 401) {
-          localStorage.clear();
-          navigate('/login');
-        } else {
-          console.error('Error al cargar matches:', error);
-          setEstudiantesAfines([]);
-        }
-      } finally {
-        setCargando(false);
-      }
+      await cargarMatches(perfilLogueado, miIdLogueado);
     };
 
     inicializarDashboard();
   }, [navigate]);
 
   // Tarjetas que faltan por deslizar (para el contador)
-  const tarjetasRestantes = currentIndex + 1;
+  const tarjetasRestantes = estudiantesAfines.length;
 
   let textoSedeEncabezado = null;
 
@@ -778,6 +953,20 @@ const Dashboard = () => {
     if (sedeLogueado) {
       textoSedeEncabezado = `Sede: ${sedeLogueado}`;
     }
+  }
+
+  // ── Ventana deslizante: solo las últimas MAX_CARTAS_DOM entradas van al DOM ──
+  const MAX_CARTAS_DOM = 10;
+
+  let ventanaTarjetas = [];
+  let indiceInicioVentana = 0;
+
+  if (estudiantesAfines.length > MAX_CARTAS_DOM) {
+    indiceInicioVentana = estudiantesAfines.length - MAX_CARTAS_DOM;
+    ventanaTarjetas = estudiantesAfines.slice(-MAX_CARTAS_DOM);
+  } else {
+    ventanaTarjetas = estudiantesAfines.slice(0);
+    indiceInicioVentana = 0;
   }
 
   return (
@@ -823,10 +1012,10 @@ const Dashboard = () => {
           <div>
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Estudiantes más afines</h3>
             <p className="text-xs text-gray-400 mt-0.5">
-              Desliza para conectar · Los matches van directo a tu chat
+              Acepta para conectar · Los matches van directo a tu chat
             </p>
           </div>
-          {!cargando && estudiantesAfines.length > 0 && currentIndex >= 0 && (
+          {!cargando && estudiantesAfines.length > 0 && (
             <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg uppercase tracking-wide">
               {tarjetasRestantes} {tarjetasRestantes === 1 ? 'perfil' : 'perfiles'}
             </span>
@@ -842,7 +1031,7 @@ const Dashboard = () => {
         )}
 
         {/* ── Estado: sin matches disponibles ── */}
-        {!cargando && estudiantesAfines.length === 0 && (
+        {!cargando && estudiantesAfines.length === 0 && !mazoCompletado && (
           <div className="bg-white rounded-3xl p-12 flex flex-col items-center text-center shadow-sm border border-gray-100 gap-3">
             <span className="text-5xl">🔍</span>
             <p className="font-bold text-gray-700">Sin matches disponibles</p>
@@ -856,45 +1045,55 @@ const Dashboard = () => {
         )}
 
         {/* ── Estado: mazo agotado (todos deslizados) ── */}
-        {!cargando && estudiantesAfines.length > 0 && currentIndex < 0 && (
+        {!cargando && estudiantesAfines.length === 0 && mazoCompletado && (
           <div className="flex flex-col items-center justify-center py-16 gap-4 text-center px-6">
             <span className="text-5xl">🎉</span>
             <p className="font-extrabold text-gray-800 text-lg">¡Revisaste todos los perfiles!</p>
             <p className="text-sm text-gray-400 max-w-[220px]">
               Vuelve más tarde para ver nuevos estudiantes o revisa tus chats.
             </p>
-            <Link to="/chats" className="mt-2 text-blue-600 font-bold text-sm hover:underline">
+            <button
+              type="button"
+              onClick={handleVolverABuscarPerfiles}
+              className="mt-2 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold text-sm px-5 py-2.5 rounded-2xl shadow-sm transition-all"
+            >
+              Volver a buscar perfiles
+            </button>
+            <Link to="/chats" className="mt-1 text-blue-600 font-bold text-sm hover:underline">
               Ver mis chats →
             </Link>
           </div>
         )}
 
         {/* ── MAZO DE TARJETAS SWIPE ─────────────────────────────────────────── */}
-        {!cargando && estudiantesAfines.length > 0 && currentIndex >= 0 && (
+        {!cargando && estudiantesAfines.length > 0 && (
           <div className="flex flex-col items-center">
 
             {/* Mazo de tarjetas — contenedor aislado del flujo de botones */}
             <div className="relative w-80 h-120 z-0 isolate bg-zinc-900 rounded-2xl overflow-hidden">
-              {estudiantesAfines.map((item, idx) => {
-                const usuarioDelItem        = item.usuario;
-                const idDelItem             = usuarioDelItem?._id || usuarioDelItem?.id || idx;
+              {ventanaTarjetas.map((item, idxLocal) => {
+                const usuarioDelItem = item.usuario;
+                let idDelItem = idxLocal;
 
-                let afinidadCalculada = null;
-                if (miPerfil && usuarioDelItem) {
-                  afinidadCalculada = calcularAfinidad(miPerfil, usuarioDelItem);
+                if (usuarioDelItem && usuarioDelItem._id) {
+                  idDelItem = usuarioDelItem._id;
+                } else if (usuarioDelItem && usuarioDelItem.id) {
+                  idDelItem = usuarioDelItem.id;
                 }
 
-                const scoreDelItem = afinidadCalculada;
+                const idxGlobal = indiceInicioVentana + idxLocal;
+                const scoreDelItem = obtenerPuntuacionItemMatch(item, miPerfil);
 
-                // Tarjetas ya deslizadas (idx > currentIndex) no se montan — evita superposición
-                if (idx > currentIndex) {
-                  return null;
+                let esTarjetaSuperior = false;
+
+                if (idxLocal === ventanaTarjetas.length - 1) {
+                  esTarjetaSuperior = true;
                 }
 
-                const esTarjetaSuperior = idx === currentIndex;
-                const zIndexTarjeta     = idx + 1;
+                const zIndexTarjeta = idxLocal + 1;
 
                 let pointerEventsTarjeta = 'none';
+
                 if (esTarjetaSuperior) {
                   pointerEventsTarjeta = 'auto';
                 }
@@ -909,12 +1108,12 @@ const Dashboard = () => {
                     }}
                   >
                     <TinderCard
-                      ref={childRefs[idx]}
+                      ref={childRefs[idxLocal]}
                       onSwipe={(dir) => {
-                        handleSwipe(dir, idx, idDelItem);
+                        handleSwipe(dir, idxGlobal, idDelItem);
                       }}
                       onCardLeftScreen={(dir) => {
-                        handleCardLeftScreen(dir, idx, idDelItem);
+                        handleCardLeftScreen(dir, idxGlobal, idDelItem);
                       }}
                       preventSwipe={['up', 'down']}
                       className="w-full h-full"

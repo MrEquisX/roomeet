@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
 import Dashboard from './pages/Dashboard';
@@ -25,31 +25,33 @@ function ProtectedRoute({ children }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Rutas públicas */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/registro" element={<Registro />} />
-        <Route path="/recuperar" element={<RecuperarPassword />} />
-        <Route path="/nueva-password" element={<NuevaPassword />} />
+    <div className="min-h-screen bg-surface text-neutral-700 font-sans">
+      <HashRouter>
+        <Routes>
+          {/* Rutas públicas */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/registro" element={<Registro />} />
+          <Route path="/recuperar" element={<RecuperarPassword />} />
+          <Route path="/nueva-password" element={<NuevaPassword />} />
 
-        {/* Rutas protegidas */}
-        <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/explorar" element={<Explorar />} />
-          <Route path="/chats" element={<Chats />} />
-          <Route path="/perfil" element={<Perfil />} />
-          <Route path="/chat/:id" element={<Conversacion />} />
-          <Route path="/editar-perfil" element={<EditarPerfil />} />
-          <Route path="/completar-perfil" element={<CompletarPerfil />} />
-          <Route path="/anadir-vivienda" element={<AnadirVivienda />} />
-          <Route path="/editar-vivienda/:id" element={<AnadirVivienda />} />
-          <Route path="/usuario/:id" element={<PerfilPublico />} />
-          <Route path="/detalle-vivienda/:id" element={<DetalleVivienda />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* Rutas protegidas */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/explorar" element={<Explorar />} />
+            <Route path="/chats" element={<Chats />} />
+            <Route path="/perfil" element={<Perfil />} />
+            <Route path="/chat/:id" element={<Conversacion />} />
+            <Route path="/editar-perfil" element={<EditarPerfil />} />
+            <Route path="/completar-perfil" element={<CompletarPerfil />} />
+            <Route path="/anadir-vivienda" element={<AnadirVivienda />} />
+            <Route path="/editar-vivienda/:id" element={<AnadirVivienda />} />
+            <Route path="/usuario/:id" element={<PerfilPublico />} />
+            <Route path="/detalle-vivienda/:id" element={<DetalleVivienda />} />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </div>
   );
 }
 

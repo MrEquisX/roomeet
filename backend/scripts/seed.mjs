@@ -1,6 +1,6 @@
 /**
  * seed.mjs
- * Genera 1000 perfiles estudiantiles realistas para ROOMEET.
+ * Genera 250 perfiles estudiantiles realistas para ROOMEET.
  * Ejecutar desde /backend: node scripts/seed.mjs
  */
 
@@ -25,7 +25,7 @@ import { universidadesChile } from './sedes_nacionales.mjs';
 
 // ─── Constantes globales ──────────────────────────────────────────────────────
 
-const TOTAL_PERFILES     = 1000;
+const TOTAL_PERFILES     = 250;
 const PORCENTAJE_VIVIENDA = 0.40;
 const CANTIDAD_CON_VIVIENDA = Math.floor(TOTAL_PERFILES * PORCENTAJE_VIVIENDA);
 const PASSWORD_PLANO = 'Password123!';
@@ -130,6 +130,23 @@ const DESCRIPCIONES_VIVIENDA = [
   'Departamento seguro y bien iluminado, perfecto para quienes necesitan un lugar estable durante la carrera universitaria.',
   'La pieza cuenta con buena ventilación y acceso a servicios básicos. El barrio es tranquilo y familiar.',
 ];
+
+const FOTOS_INTERIOR_VIVIENDA = [
+  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1554995207-c18c203602cb?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+];
+
+const CATEGORIAS_FOTO_INTERIOR = ['interior', 'apartment', 'house'];
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -273,11 +290,25 @@ function generarCoordenadasCercanas(latBase, lngBase) {
 
 function generarImagenesVivienda(prefijoSemilla, cantidad) {
   const imagenes = [];
+  const poolEstatico = [...FOTOS_INTERIOR_VIVIENDA];
 
   for (let i = 0; i < cantidad; i++) {
-    const semilla = `${prefijoSemilla}-foto-${i + 1}`;
-    const url = `https://picsum.photos/seed/${semilla}/800/600`;
-    imagenes.push(url);
+    let urlFoto = null;
+
+    if (poolEstatico.length > 0) {
+      const indiceEstatico = faker.number.int({ min: 0, max: poolEstatico.length - 1 });
+      urlFoto = poolEstatico[indiceEstatico];
+      poolEstatico.splice(indiceEstatico, 1);
+    } else {
+      const categoriaInterior = faker.helpers.arrayElement(CATEGORIAS_FOTO_INTERIOR);
+      urlFoto = faker.image.urlLoremFlickr({
+        category: categoriaInterior,
+        width:    800,
+        height:   600,
+      });
+    }
+
+    imagenes.push(urlFoto);
   }
 
   return imagenes;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/env.js';
 
 const ChatsArchivados = () => {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ const ChatsArchivados = () => {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch('http://localhost:3000/api/chats/archivados', {
+        const res = await fetch(`${API_URL}/chats/archivados`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -41,7 +42,7 @@ const ChatsArchivados = () => {
   const handleDesarchivar = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3000/api/chats/${id}/desarchivar`, {
+      const res = await fetch(`${API_URL}/chats/${id}/desarchivar`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,

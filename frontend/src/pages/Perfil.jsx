@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { API_BASE } from '../utils/perfilHelpers';
+import { normalizarInteresParaVista } from '../utils/perfilHelpers';
+import { API_BASE, API_URL } from '../config/env.js';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {
@@ -50,7 +51,7 @@ const Perfil = () => {
           return;
         }
 
-        const res = await fetch(`${API_BASE}/api/usuarios/mi-perfil`, {
+        const res = await fetch(`${API_URL}/usuarios/mi-perfil`, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         });
         if (res.status === 401) {
@@ -63,7 +64,7 @@ const Perfil = () => {
 
         if (data.alojamientoId) {
           try {
-            const resAloj = await fetch(`${API_BASE}/api/alojamientos/${data.alojamientoId}`, {
+            const resAloj = await fetch(`${API_URL}/alojamientos/${data.alojamientoId}`, {
               headers: { Authorization: `Bearer ${token}` },
             });
             if (resAloj.ok) {
@@ -263,22 +264,7 @@ const Perfil = () => {
                 </div>
               </div>
             )}
-            {(ubicacion.direccion || ubicacion.latitud) && (
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-lg shrink-0">🗺️</div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ubicación</p>
-                  {ubicacion.direccion && (
-                    <p className="text-sm font-semibold text-gray-700">{ubicacion.direccion}</p>
-                  )}
-                  {ubicacion.latitud !== null && ubicacion.longitud !== null && (
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {ubicacion.latitud}, {ubicacion.longitud}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+            
           </div>
         </section>
 
@@ -390,10 +376,12 @@ const Perfil = () => {
               <span className="text-xs text-gray-400">Sin intereses registrados</span>
             )}
             {intereses.map((interes, index) => {
+              const interesNormalizado = normalizarInteresParaVista(interes);
+
               return (
                 <span key={index} className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl text-xs font-bold text-gray-700 border border-gray-200 shadow-sm">
-                  <span>{interes?.icono || '⭐'}</span>
-                  {interes?.nombre || (typeof interes === 'string' ? interes : '')}
+                  <span>{interesNormalizado.icono}</span>
+                  {interesNormalizado.nombre}
                 </span>
               );
             })}

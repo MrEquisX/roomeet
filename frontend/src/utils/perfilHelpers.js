@@ -1,6 +1,4 @@
-export { universidadesChile } from '../../../backend/scripts/sedes_nacionales.mjs';
-
-export const API_BASE = 'http://localhost:3000';
+export { universidadesChile } from '../data/sedes_nacionales.mjs';
 
 export const ANIO_ACTUAL = new Date().getFullYear();
 export const ANIO_MIN_INGRESO = ANIO_ACTUAL - 10;
@@ -59,6 +57,47 @@ export const INTERESES_OPCIONES = [
   { nombre: 'Judo',           icono: '🤼' },
   { nombre: 'Boxeo',          icono: '🥊' },
 ];
+
+export const obtenerIconoInteres = (nombreInteres) => {
+  if (!nombreInteres) {
+    return '🏷️';
+  }
+
+  for (const opcion of INTERESES_OPCIONES) {
+    if (opcion.nombre === nombreInteres) {
+      return opcion.icono;
+    }
+  }
+
+  return '🏷️';
+};
+
+export const normalizarInteresParaVista = (interes) => {
+  let nombre = '';
+  let icono = null;
+
+  if (typeof interes === 'string') {
+    nombre = interes;
+  } else if (interes && interes.nombre) {
+    nombre = interes.nombre;
+    if (interes.icono) {
+      icono = interes.icono;
+    }
+  }
+
+  if (!icono && nombre) {
+    icono = obtenerIconoInteres(nombre);
+  }
+
+  if (!icono) {
+    icono = '🏷️';
+  }
+
+  return {
+    nombre: nombre,
+    icono:  icono,
+  };
+};
 
 export const OPCIONES_FUMA = ['Sí', 'No', 'Ocasionalmente'];
 export const OPCIONES_BEBE = ['Sí', 'No', 'Ocasionalmente'];
@@ -259,28 +298,219 @@ const obtenerToleranciaRuidoPerfil = (perfil) => {
   return Number(valor);
 };
 
-export const calcularAfinidad = (perfilA, perfilB) => {
-  let puntaje = 0;
+const obtenerDatosAcademicosPerfil = (perfil) => {
+  let universidad = '';
+  let sede = '';
+  let carrera = '';
 
+  if (perfil && perfil.perfil_academico) {
+    if (perfil.perfil_academico.universidad) {
+      universidad = String(perfil.perfil_academico.universidad).toLowerCase().trim();
+    }
+    if (perfil.perfil_academico.sede) {
+      sede = String(perfil.perfil_academico.sede).toLowerCase().trim();
+    }
+    if (perfil.perfil_academico.carrera) {
+      carrera = String(perfil.perfil_academico.carrera).toLowerCase().trim();
+    }
+  }
+
+  if (universidad.length === 0 && perfil && perfil.universidad) {
+    universidad = String(perfil.universidad).toLowerCase().trim();
+  }
+
+  if (sede.length === 0 && perfil && perfil.sede) {
+    sede = String(perfil.sede).toLowerCase().trim();
+  }
+
+  if (carrera.length === 0 && perfil && perfil.carrera) {
+    carrera = String(perfil.carrera).toLowerCase().trim();
+  }
+
+  return {
+    universidad: universidad,
+    sede:        sede,
+    carrera:     carrera,
+  };
+};
+
+const obtenerFiltrosPerfil = (perfil) => {
+  if (!perfil) {
+    return {};
+  }
+
+  if (perfil.filtros) {
+    return perfil.filtros;
+  }
+
+  return {};
+};
+
+const calcularPuntosHabitoTernario = (valorA, valorB) => {
+  let textoA = '';
+  if (valorA) {
+    textoA = String(valorA);
+  }
+
+  let textoB = '';
+  if (valorB) {
+    textoB = String(valorB);
+  }
+
+  if (textoA.length === 0 || textoB.length === 0) {
+    return 0;
+  }
+
+  if (textoA === textoB) {
+    return 7;
+  }
+
+  let esOpuesto = false;
+
+  if (textoA === 'Sí' && textoB === 'No') {
+    esOpuesto = true;
+  }
+
+  if (textoA === 'No' && textoB === 'Sí') {
+    esOpuesto = true;
+  }
+
+  if (esOpuesto) {
+    return 0;
+  }
+
+  if (textoA === 'Ocasionalmente' || textoB === 'Ocasionalmente') {
+    return 3;
+  }
+
+  return 0;
+};
+
+const calcularPuntosPorDiferenciaEscala = (diferencia) => {
+  if (diferencia === 0) {
+    return 8;
+  }
+
+  if (diferencia === 1) {
+    return 5;
+  }
+
+  if (diferencia === 2) {
+    return 2;
+  }
+
+  return 0;
+};
+
+export const calcularAfinidad = (perfilA, perfilB) => {
   const prefA = obtenerPreferenciasConvivencia(perfilA);
   const prefB = obtenerPreferenciasConvivencia(perfilB);
+  const acadA = obtenerDatosAcademicosPerfil(perfilA);
+  const acadB = obtenerDatosAcademicosPerfil(perfilB);
+  const filtrosA = obtenerFiltrosPerfil(perfilA);
 
-  const fumaA = prefA.fuma;
-  const fumaB = prefB.fuma;
-  if (fumaA && fumaB && fumaA === fumaB) {
-    puntaje = puntaje + 10;
+  if (filtrosA.soloMismaUniversidad === true) {
+    if (acadA.universidad.length === 0 || acadB.universidad.length === 0) {
+      return 0;
+    }
+
+    if (acadA.universidad !== acadB.universidad) {
+      return 0;
+    }
   }
 
-  const bebeA = prefA.bebe_alcohol ?? prefA.bebeAlcohol ?? null;
-  const bebeB = prefB.bebe_alcohol ?? prefB.bebeAlcohol ?? null;
-  if (bebeA && bebeB && bebeA === bebeB) {
-    puntaje = puntaje + 10;
+  if (filtrosA.soloMismaCarrera === true) {
+    if (acadA.carrera.length === 0 || acadB.carrera.length === 0) {
+      return 0;
+    }
+
+    if (acadA.carrera !== acadB.carrera) {
+      return 0;
+    }
   }
 
-  const mascotasA = prefA.mascotas ?? prefA.acepta_mascotas ?? null;
-  const mascotasB = prefB.mascotas ?? prefB.acepta_mascotas ?? null;
-  if (mascotasA && mascotasB && mascotasA === mascotasB) {
-    puntaje = puntaje + 10;
+  let puntajeTotal = 20;
+  let puntajeAcademico = 0;
+  let puntajeHabitos = 0;
+  let puntajeConvivencia = 0;
+  let puntajeIntereses = 0;
+
+  if (acadA.universidad.length > 0 && acadB.universidad.length > 0) {
+    if (acadA.universidad === acadB.universidad) {
+      puntajeAcademico = puntajeAcademico + 10;
+    }
+  }
+
+  if (acadA.sede.length > 0 && acadB.sede.length > 0) {
+    if (acadA.sede === acadB.sede) {
+      puntajeAcademico = puntajeAcademico + 6;
+    }
+  }
+
+  if (acadA.carrera.length > 0 && acadB.carrera.length > 0) {
+    if (acadA.carrera === acadB.carrera) {
+      puntajeAcademico = puntajeAcademico + 4;
+    }
+  }
+
+  if (puntajeAcademico > 20) {
+    puntajeAcademico = 20;
+  }
+
+  let fumaA = '';
+  if (prefA.fuma) {
+    fumaA = String(prefA.fuma);
+  }
+
+  let fumaB = '';
+  if (prefB.fuma) {
+    fumaB = String(prefB.fuma);
+  }
+
+  const puntosFuma = calcularPuntosHabitoTernario(fumaA, fumaB);
+  puntajeHabitos = puntajeHabitos + puntosFuma;
+
+  let bebeA = prefA.bebe_alcohol ?? prefA.bebeAlcohol ?? null;
+  let bebeB = prefB.bebe_alcohol ?? prefB.bebeAlcohol ?? null;
+
+  let bebeAStr = '';
+  if (bebeA) {
+    bebeAStr = String(bebeA);
+  }
+
+  let bebeBStr = '';
+  if (bebeB) {
+    bebeBStr = String(bebeB);
+  }
+
+  const puntosBebe = calcularPuntosHabitoTernario(bebeAStr, bebeBStr);
+  puntajeHabitos = puntajeHabitos + puntosBebe;
+
+  let mascotasA = prefA.mascotas ?? prefA.acepta_mascotas ?? null;
+  let mascotasB = prefB.mascotas ?? prefB.acepta_mascotas ?? null;
+
+  let mascotasAStr = '';
+  if (mascotasA) {
+    mascotasAStr = String(mascotasA);
+  }
+
+  let mascotasBStr = '';
+  if (mascotasB) {
+    mascotasBStr = String(mascotasB);
+  }
+
+  let puntosMascotas = 0;
+
+  if (mascotasAStr.length > 0 && mascotasBStr.length > 0) {
+    if (mascotasAStr === mascotasBStr) {
+      puntosMascotas = 7;
+    }
+  }
+
+  puntajeHabitos = puntajeHabitos + puntosMascotas;
+
+  if (puntajeHabitos > 21) {
+    puntajeHabitos = 21;
   }
 
   const nivelOrdenA = obtenerNivelOrdenPerfil(perfilA);
@@ -288,9 +518,8 @@ export const calcularAfinidad = (perfilA, perfilB) => {
 
   if (nivelOrdenA !== null && nivelOrdenB !== null) {
     const diferenciaOrden = Math.abs(nivelOrdenA - nivelOrdenB);
-    if (diferenciaOrden <= 1) {
-      puntaje = puntaje + 15;
-    }
+    const puntosOrden = calcularPuntosPorDiferenciaEscala(diferenciaOrden);
+    puntajeConvivencia = puntajeConvivencia + puntosOrden;
   }
 
   const toleranciaRuidoA = obtenerToleranciaRuidoPerfil(perfilA);
@@ -298,38 +527,88 @@ export const calcularAfinidad = (perfilA, perfilB) => {
 
   if (toleranciaRuidoA !== null && toleranciaRuidoB !== null) {
     const diferenciaRuido = Math.abs(toleranciaRuidoA - toleranciaRuidoB);
-    if (diferenciaRuido <= 1) {
-      puntaje = puntaje + 15;
+    const puntosRuido = calcularPuntosPorDiferenciaEscala(diferenciaRuido);
+    puntajeConvivencia = puntajeConvivencia + puntosRuido;
+  }
+
+  let horarioA = '';
+  if (prefA.horario_preferido) {
+    horarioA = String(prefA.horario_preferido);
+  } else if (prefA.horarioPreferido) {
+    horarioA = String(prefA.horarioPreferido);
+  }
+
+  let horarioB = '';
+  if (prefB.horario_preferido) {
+    horarioB = String(prefB.horario_preferido);
+  } else if (prefB.horarioPreferido) {
+    horarioB = String(prefB.horarioPreferido);
+  }
+
+  let horarioCompatible = false;
+
+  if (horarioA.length > 0 && horarioB.length > 0) {
+    if (horarioA === horarioB) {
+      horarioCompatible = true;
     }
+  }
+
+  if (horarioA === 'Indiferente') {
+    horarioCompatible = true;
+  }
+
+  if (horarioB === 'Indiferente') {
+    horarioCompatible = true;
+  }
+
+  if (horarioCompatible) {
+    puntajeConvivencia = puntajeConvivencia + 8;
+  }
+
+  if (puntajeConvivencia > 24) {
+    puntajeConvivencia = 24;
   }
 
   const interesesA = extraerNombresInteresesPerfil(perfilA);
   const interesesB = extraerNombresInteresesPerfil(perfilB);
-  const interesesCompartidos = [];
+  let cantidadCompartidos = 0;
 
-  for (const interes of interesesA) {
-    let estaEnB = false;
+  for (let i = 0; i < interesesA.length; i++) {
+    const interesActual = interesesA[i];
+    let encontrado = false;
 
-    for (const otro of interesesB) {
-      if (interes === otro) {
-        estaEnB = true;
+    for (let j = 0; j < interesesB.length; j++) {
+      const otroInteres = interesesB[j];
+
+      if (interesActual === otroInteres) {
+        encontrado = true;
         break;
       }
     }
 
-    if (estaEnB) {
-      interesesCompartidos.push(interes);
+    if (encontrado) {
+      cantidadCompartidos = cantidadCompartidos + 1;
     }
   }
 
-  const cantidadCompartidos = interesesCompartidos.length;
-  let puntosIntereses = cantidadCompartidos * 8;
+  puntajeIntereses = cantidadCompartidos * 5;
 
-  if (puntosIntereses > 40) {
-    puntosIntereses = 40;
+  if (puntajeIntereses > 15) {
+    puntajeIntereses = 15;
   }
 
-  puntaje = puntaje + puntosIntereses;
+  puntajeTotal = puntajeTotal + puntajeAcademico;
+  puntajeTotal = puntajeTotal + puntajeHabitos;
+  puntajeTotal = puntajeTotal + puntajeConvivencia;
+  puntajeTotal = puntajeTotal + puntajeIntereses;
 
-  return Math.round(puntaje);
+  if (puntajeTotal > 100) {
+    puntajeTotal = 100;
+  }
+
+  if (puntajeTotal < 0) {
+    puntajeTotal = 0;
+  }
+
+  return Math.round(puntajeTotal);
 };

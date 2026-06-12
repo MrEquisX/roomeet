@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_URL } from '../config/env.js';
 
 const RecuperarPassword = () => {
   const [email, setEmail] = useState('');
@@ -10,7 +11,7 @@ const RecuperarPassword = () => {
     setFeedback({ sent: false, error: null, loading: true });
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/recuperar-password", {
+      const response = await fetch(`${API_URL}/auth/recuperar-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

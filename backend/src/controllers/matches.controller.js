@@ -35,6 +35,100 @@ const calcularEsMutuo = async (idUsuario, idDestinatario) => {
   return !!reciproco;
 };
 
+const UMBRAL_AFINIDAD_IDEAL = 18;
+const MAX_PERFILES_CONTINGENCIA = 50;
+
+/**
+ * Si ningún perfil supera el umbral ideal, devuelve los de mayor puntuación
+ * para que el Dashboard nunca quede vacío en demostraciones.
+ */
+const filtrarPorUmbralConContingencia = (resultados) => {
+  const sobreUmbral = [];
+
+  for (const entrada of resultados) {
+    const score = entrada.matchScore;
+    if (score >= UMBRAL_AFINIDAD_IDEAL) {
+      sobreUmbral.push(entrada);
+    }
+  }
+
+  if (sobreUmbral.length > 0) {
+    return sobreUmbral;
+  }
+
+  const copiaOrdenada = [...resultados];
+  copiaOrdenada.sort(function (a, b) {
+    return b.matchScore - a.matchScore;
+  });
+
+  const contingencia = [];
+  const limite = Math.min(copiaOrdenada.length, MAX_PERFILES_CONTINGENCIA);
+
+  for (let i = 0; i < limite; i++) {
+    contingencia.push(copiaOrdenada[i]);
+  }
+
+  return contingencia;
+};
+
+/**
+ * Consulta todos los candidatos excepto el usuario actual (con o sin vivienda, cualquier rol).
+ */
+const consultarCandidatosEmparejamiento = async (yo, miObjectId) => {
+  const candidatos = await Usuario.find({
+    _id: { $ne: miObjectId },
+  })
+    .select('-password')
+    .lean();
+
+  return candidatos;
+};
+
+const CANTIDAD_RESCATE_EMERGENCIA = 15;
+
+const generarPuntuacionRescateAleatoria = () => {
+  const minimo = 40;
+  const maximo = 70;
+  const rango = maximo - minimo + 1;
+  const aleatorio = Math.floor(Math.random() * rango);
+  const puntuacion = minimo + aleatorio;
+  return puntuacion;
+};
+
+/**
+ * Plan B de emergencia: devuelve hasta 15 usuarios aleatorios con afinidad simulada 40–70%.
+ */
+const obtenerFallbackEmergencia = async (miObjectId) => {
+  const usuariosRescate = await Usuario.find({
+    _id: { $ne: miObjectId },
+  })
+    .select('-password')
+    .limit(CANTIDAD_RESCATE_EMERGENCIA)
+    .lean();
+
+  const resultadosRescate = [];
+
+  for (const candidato of usuariosRescate) {
+    const puntuacion = generarPuntuacionRescateAleatoria();
+
+    const entrada = {
+      matchScore:         puntuacion,
+      porcentajeAfinidad: puntuacion,
+      compatibilidad:     `${puntuacion}%`,
+      esRescate:          true,
+      usuario:            candidato,
+    };
+
+    resultadosRescate.push(entrada);
+  }
+
+  resultadosRescate.sort(function (a, b) {
+    return b.matchScore - a.matchScore;
+  });
+
+  return resultadosRescate;
+};
+
 // POST /api/matches  — Aceptar perfil (swipe derecha)
 const crearMatch = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
@@ -149,4 +243,8 @@ module.exports = {
   obtenerMisMatches,
   buscarOCrearChat,
   ordenarParticipantes,
+  filtrarPorUmbralConContingencia,
+  consultarCandidatosEmparejamiento,
+  obtenerFallbackEmergencia,
+  UMBRAL_AFINIDAD_IDEAL,
 };

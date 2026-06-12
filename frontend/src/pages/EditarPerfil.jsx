@@ -5,7 +5,6 @@ import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
 import {
   universidadesChile,
-  API_BASE,
   ANIO_ACTUAL,
   ANIO_MIN_INGRESO,
   INTERESES_OPCIONES,
@@ -26,6 +25,7 @@ import {
   EDAD_MINIMA,
   EDAD_MAXIMA,
 } from '../utils/perfilHelpers';
+import { API_BASE, API_URL } from '../config/env.js';
 
 const customIcon = new Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -141,7 +141,7 @@ const EditarPerfil = () => {
     const fetchUsuario = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${API_BASE}/api/usuarios/mi-perfil`, {
+        const res = await fetch(`${API_URL}/usuarios/mi-perfil`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
@@ -507,13 +507,13 @@ const EditarPerfil = () => {
           }
         });
         formData.append('foto_perfil', fotoPerfil);
-        response = await fetch(`${API_BASE}/api/usuarios/editar`, {
+        response = await fetch(`${API_URL}/usuarios/editar`, {
           method: 'PUT',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
       } else {
-        response = await fetch(`${API_BASE}/api/usuarios/editar`, {
+        response = await fetch(`${API_URL}/usuarios/editar`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

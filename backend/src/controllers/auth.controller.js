@@ -210,35 +210,44 @@ const olvideMiPassword = async (req, res) => {
         const tokenHash  = crypto.createHash('sha256').update(tokenPlano).digest('hex');
 
         usuario.resetPasswordToken   = tokenHash;
-        usuario.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+        usuario.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
         await usuario.save({ validateBeforeSave: false });
 
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const enlace      = `${frontendUrl}/nueva-password?token=${tokenPlano}`;
 
-        const transporte = crearTransporte();
-        await transporte.sendMail({
-            from:    `"Roomeet" <${process.env.EMAIL_USER}>`,
-            to:      usuario.email,
-            subject: 'Recuperación de contraseña — Roomeet',
-            html: `
-                <div style="font-family:sans-serif;max-width:480px;margin:auto">
-                    <h2 style="color:#1d4ed8">Recupera tu contraseña</h2>
-                    <p>Hola <strong>${usuario.nombre_completo}</strong>,</p>
-                    <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Roomeet.</p>
-                    <p>Haz clic en el botón para crear una nueva contraseña. Este enlace es válido por <strong>1 hora</strong>.</p>
-                    <a href="${enlace}"
-                       style="display:inline-block;margin:20px 0;padding:14px 28px;background:#1d4ed8;color:#fff;border-radius:12px;text-decoration:none;font-weight:bold;">
-                        Restablecer contraseña
-                    </a>
-                    <p style="color:#6b7280;font-size:13px">Si no solicitaste esto, ignora este correo.</p>
-                    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-                    <p style="color:#9ca3af;font-size:11px">Equipo Roomeet · Chile</p>
-                </div>
-            `,
-        });
+        try {
+            const transporte = crearTransporte();
+            await transporte.sendMail({
+                from:    `"Roomeet" <${process.env.EMAIL_USER}>`,
+                to:      usuario.email,
+                subject: 'Recuperación de contraseña — Roomeet',
+                html: `
+                    <div style="font-family:sans-serif;max-width:480px;margin:auto">
+                        <h2 style="color:#1d4ed8">Recupera tu contraseña</h2>
+                        <p>Hola <strong>${usuario.nombre_completo}</strong>,</p>
+                        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Roomeet.</p>
+                        <p>Haz clic en el botón para crear una nueva contraseña. Este enlace es válido por <strong>1 hora</strong>.</p>
+                        <a href="${enlace}"
+                           style="display:inline-block;margin:20px 0;padding:14px 28px;background:#1d4ed8;color:#fff;border-radius:12px;text-decoration:none;font-weight:bold;">
+                            Restablecer contraseña
+                        </a>
+                        <p style="color:#6b7280;font-size:13px">Si no solicitaste esto, ignora este correo.</p>
+                        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+                        <p style="color:#9ca3af;font-size:11px">Equipo Roomeet · Chile</p>
+                    </div>
+                `,
+            });
+        } catch (mailError) {
+            console.error('[olvideMiPassword] Error al enviar correo:', mailError.message);
+            if (process.env.NODE_ENV !== 'production') {
+                console.error('[olvideMiPassword] Token de recuperación generado (solo dev):', tokenPlano);
+            }
+        }
 
-        return res.status(200).json({ msg: 'Si el correo existe recibirás un enlace en breve.' });
+        return res.status(200).json({
+            msg: 'Si el correo existe recibirás un enlace en breve.',
+        });
 
     } catch (error) {
         console.error('[olvideMiPassword] Error:', error.message);

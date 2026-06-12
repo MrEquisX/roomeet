@@ -2,9 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/apiClient';
-
-const SOCKET_URL = 'http://localhost:3000';
-const API_BASE = 'http://localhost:3000';
+import { API_BASE, SOCKET_URL } from '../config/env.js';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {

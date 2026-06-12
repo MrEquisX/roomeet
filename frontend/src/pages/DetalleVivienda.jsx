@@ -3,7 +3,8 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
-import { API_BASE } from '../utils/perfilHelpers';
+import { API_BASE, API_URL } from '../config/env.js';
+import { apiClient } from '../services/apiClient';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {
@@ -25,7 +26,9 @@ const customIcon = new Icon({
 });
 
 // Componente auxiliar para recentrar el mapa al cargar
-const MapRecenter = ({ lat, lng }) => {
+const MapRecenter = (props) => {
+  const lat = props.lat;
+  const lng = props.lng;
   const map = useMap();
   useEffect(() => {
     map.setView([lat, lng], 15);
@@ -55,7 +58,7 @@ const DetalleVivienda = (props) => {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:3000/api/alojamientos/${id}`, {
+        const response = await fetch(`${API_URL}/alojamientos/${id}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -126,38 +129,43 @@ const DetalleVivienda = (props) => {
     setIndiceFotoActual(indice);
   };
 
-  // Postulación/contactar: crea la solicitud y navega al chat usando el ID devuelto por el backend
+  // Postulación/contactar: crea la solicitud y navega al chat con el anfitrión
   const handleContactar = async () => {
-    if (!vivienda) return;
+    if (!vivienda) {
+      return;
+    }
 
-    const anuncianteId = vivienda.anunciante?.id || vivienda.anunciante?._id || vivienda.anuncianteId;
-    if (!anuncianteId) {
+    const idAnfitrion = vivienda.id_anfitrion;
+    if (!idAnfitrion) {
       setContactarError('No se pudo identificar al anunciante. Intenta recargar la página.');
       return;
     }
 
     setContactarError('');
     setContactando(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/solicitudes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ alojamientoId: vivienda.id || vivienda._id })
-      });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data?.mensaje || data?.message || 'No fue posible contactar al anunciante');
+    try {
+      const idAlojamiento = vivienda._id || vivienda.id;
+      const payload = {
+        id_alojamiento: String(idAlojamiento),
+      };
+
+      await apiClient.post('/solicitudes', payload);
+
+      const respuestaChat = await apiClient.get('/chats/con-usuario/' + String(idAnfitrion));
+
+      let chatId = null;
+      if (respuestaChat) {
+        if (respuestaChat.id_chat) {
+          chatId = respuestaChat.id_chat;
+        }
       }
 
-      const solicitud = await response.json();
-      // Usamos el ID de la solicitud creada como sala de chat; si no viene, usamos el ID del anunciante
-      const chatId = solicitud._id || solicitud.id || solicitud.idSolicitud || anuncianteId;
-      navigate(`/chat/${chatId}`);
+      if (!chatId) {
+        throw new Error('No se pudo abrir el chat con el anunciante.');
+      }
+
+      navigate('/chat/' + String(chatId));
     } catch (err) {
       setContactarError(err.message || 'Error al contactar. Intenta de nuevo.');
     } finally {
@@ -188,6 +196,11 @@ const DetalleVivienda = (props) => {
   }
 
   const fotos = obtenerFotosVivienda();
+
+  let idAnfitrionPerfil = '';
+  if (vivienda.id_anfitrion) {
+    idAnfitrionPerfil = String(vivienda.id_anfitrion);
+  }
 
   let mostrarFlechasCarrusel = false;
   if (fotos.length > 1) {
@@ -324,21 +337,23 @@ const DetalleVivienda = (props) => {
             )}
           </div>
           
-          <Link to={`/usuario/${vivienda.anunciante?.id || vivienda.anunciante?._id || vivienda.anuncianteId || ''}`} className="flex flex-col items-center group flex-shrink-0">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-md group-hover:scale-105 transition-transform relative">
-              {
-                typeof vivienda.anunciante?.foto === 'string'
-                  ? vivienda.anunciante.foto
-                  : (vivienda.anunciante?.nombre || 'US')
-              }
-              {vivienda.anunciante?.verificado && (
-                <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                </div>
-              )}
-            </div>
-            <span className="text-[10px] font-bold text-gray-600 mt-1 uppercase">Ver Perfil</span>
-          </Link>
+          {idAnfitrionPerfil && (
+            <Link to={'/usuario/' + idAnfitrionPerfil} className="flex flex-col items-center group flex-shrink-0">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-md group-hover:scale-105 transition-transform relative">
+                {
+                  typeof vivienda.anunciante?.foto === 'string'
+                    ? vivienda.anunciante.foto
+                    : (vivienda.anunciante?.nombre || 'US')
+                }
+                {vivienda.anunciante?.verificado && (
+                  <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                  </div>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-gray-600 mt-1 uppercase">Ver Perfil</span>
+            </Link>
+          )}
         </div>
 
         {/* 3. BLOQUE DE PRECIO Y PIEZAS */}

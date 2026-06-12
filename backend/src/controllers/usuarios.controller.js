@@ -1,8 +1,21 @@
 const mongoose = require('mongoose');
 const Usuario = require('../models/Usuario');
 const Alojamiento = require('../models/Alojamiento');
+const {
+  filtrarPorUmbralConContingencia,
+  consultarCandidatosEmparejamiento,
+  obtenerFallbackEmergencia,
+} = require('./matches.controller');
 
-const obtenerIdDesdeToken = (req) => req.usuario?.id;
+const obtenerIdDesdeToken = (req) => {
+    if (req.usuario && req.usuario.id) {
+        return req.usuario.id;
+    }
+    if (req.usuario && req.usuario.id_usuario) {
+        return req.usuario.id_usuario;
+    }
+    return null;
+};
 
 const normalizarFumaRespuesta = (valor) => {
     if (valor === true) {
@@ -362,140 +375,300 @@ const editarMiPerfil = async (req, res) => {
 // ─── MOTOR DE EMPAREJAMIENTO ───────────────────────────────────────────────────
 
 /**
- * Calcula la puntuación de compatibilidad entre dos usuarios.
- * Escala: 0 a 100 puntos.
- * Función pura y síncrona — no realiza consultas a la base de datos.
- *
- * Componentes del puntaje:
- *   Bloque A — Afinidad Académica ........... máx. 30 pts
- *   Bloque B — Nivel de Orden ............... máx. 20 pts
- *   Bloque C — Visitas Frecuentes ........... máx. 20 pts
- *   Bloque D — Hábitos Generales ............ máx. 30 pts
- *              (alcohol 10 + horario 10 + dieta 10)
- *
- * NOTA: El componente "presupuesto" se implementará cuando el campo
- *       `presupuesto` sea añadido al esquema Usuario y al modelo Alojamiento.
- *       Por ahora, el Bloque D cubre esos 30 puntos con compatibilidad de hábitos.
- *
- * @param {Object} yo        - Lean document del usuario autenticado
- * @param {Object} candidato - Lean document del candidato a evaluar
- * @returns {number}         - Puntuación entera entre 0 y 100
+ * Extrae nombres de intereses desde documento MongoDB (string u objeto).
+ */
+function extraerInteresesDesdeUsuario(usuario) {
+    const resultado = [];
+    const crudos = usuario.intereses || [];
+
+    for (const item of crudos) {
+        if (typeof item === 'string') {
+            resultado.push(item);
+        } else if (item && item.nombre) {
+            resultado.push(String(item.nombre));
+        }
+    }
+
+    return resultado;
+}
+
+function calcularPuntosHabitoTernario(valorYo, valorCandidato) {
+    let valorA = '';
+    if (valorYo) {
+        valorA = String(valorYo);
+    }
+
+    let valorB = '';
+    if (valorCandidato) {
+        valorB = String(valorCandidato);
+    }
+
+    if (valorA.length === 0 || valorB.length === 0) {
+        return 0;
+    }
+
+    if (valorA === valorB) {
+        return 7;
+    }
+
+    let esOpuesto = false;
+    if (valorA === 'Sí' && valorB === 'No') {
+        esOpuesto = true;
+    }
+    if (valorA === 'No' && valorB === 'Sí') {
+        esOpuesto = true;
+    }
+
+    if (esOpuesto) {
+        return 0;
+    }
+
+    if (valorA === 'Ocasionalmente' || valorB === 'Ocasionalmente') {
+        return 3;
+    }
+
+    return 0;
+}
+
+function calcularPuntosPorDiferenciaEscala(diferencia) {
+    if (diferencia === 0) {
+        return 8;
+    }
+
+    if (diferencia === 1) {
+        return 5;
+    }
+
+    if (diferencia === 2) {
+        return 2;
+    }
+
+    return 0;
+}
+
+/**
+ * Calcula la puntuación de compatibilidad suavizada entre dos usuarios (0–100).
  */
 function calcularMatchScore(yo, candidato) {
-    let score = 0;
+    const miAcad = yo.perfil_academico || {};
+    const suAcad = candidato.perfil_academico || {};
+    const misPref = yo.preferencias_convivencia || {};
+    const susPref = candidato.preferencias_convivencia || {};
+    const misFiltros = yo.filtros || {};
 
-    const misPref    = yo.preferencias_convivencia        || {};
-    const susPref    = candidato.preferencias_convivencia || {};
-    const miAcad     = yo.perfil_academico                || {};
-    const suAcad     = candidato.perfil_academico         || {};
-    const misFiltros = yo.filtros                         || {};
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BLOQUE A — Afinidad Académica (máx. 30 pts)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    const miUniversidad = (miAcad.universidad || '').toLowerCase().trim();
-    const suUniversidad = (suAcad.universidad || '').toLowerCase().trim();
-    const miSede        = (miAcad.sede        || '').toLowerCase().trim();
-    const suSede        = (suAcad.sede        || '').toLowerCase().trim();
-    const miCarrera     = (miAcad.carrera     || '').toLowerCase().trim();
-    const suCarrera     = (suAcad.carrera     || '').toLowerCase().trim();
-
-    const coincideUniversidad = (miUniversidad.length > 0) && (miUniversidad === suUniversidad);
-    const coincideSede        = (miSede.length > 0)        && (miSede        === suSede);
-    const coincideCarrera     = (miCarrera.length > 0)     && (miCarrera     === suCarrera);
-
-    if (coincideUniversidad && coincideSede) {
-        // Misma universidad y misma sede: compatibilidad académica completa
-        score = score + 30;
-    } else if (coincideUniversidad) {
-        // Solo misma universidad: compatibilidad académica parcial
-        score = score + 15;
+    let miUniversidad = '';
+    if (miAcad.universidad) {
+        miUniversidad = String(miAcad.universidad).toLowerCase().trim();
     }
 
-    // Penalización si el filtro soloMismaUniversidad está activo y no coinciden
+    let suUniversidad = '';
+    if (suAcad.universidad) {
+        suUniversidad = String(suAcad.universidad).toLowerCase().trim();
+    }
+
+    let miCarrera = '';
+    if (miAcad.carrera) {
+        miCarrera = String(miAcad.carrera).toLowerCase().trim();
+    }
+
+    let suCarrera = '';
+    if (suAcad.carrera) {
+        suCarrera = String(suAcad.carrera).toLowerCase().trim();
+    }
+
     if (misFiltros.soloMismaUniversidad === true) {
-        if (!coincideUniversidad) {
-            score = score - 10;
+        if (miUniversidad.length === 0 || suUniversidad.length === 0) {
+            return 0;
+        }
+        if (miUniversidad !== suUniversidad) {
+            return 0;
         }
     }
 
-    // Penalización si el filtro soloMismaCarrera está activo y no coinciden
     if (misFiltros.soloMismaCarrera === true) {
-        if (!coincideCarrera) {
-            score = score - 5;
+        if (miCarrera.length === 0 || suCarrera.length === 0) {
+            return 0;
+        }
+        if (miCarrera !== suCarrera) {
+            return 0;
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BLOQUE B — Nivel de Orden (máx. 20 pts)
-    // ═══════════════════════════════════════════════════════════════════════════
+    let puntajeTotal = 20;
+    let puntajeAcademico = 0;
+    let puntajeHabitos = 0;
+    let puntajeConvivencia = 0;
+    let puntajeIntereses = 0;
 
-    const miOrden  = misPref.nivel_orden || 0;
-    const suOrden  = susPref.nivel_orden || 0;
-
-    const diferenciaOrden = Math.abs(miOrden - suOrden);
-
-    if (diferenciaOrden === 0) {
-        // Orden idéntico: compatibilidad perfecta
-        score = score + 20;
-    } else if (diferenciaOrden === 1) {
-        // Diferencia mínima: compatibilidad aceptable
-        score = score + 10;
-    }
-    // Si diferenciaOrden >= 2: 0 pts — incompatibilidad notable de hábitos
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BLOQUE C — Compatibilidad de alcohol (máx. 20 pts)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    const miAlcohol = misPref.bebe_alcohol || '';
-    const suAlcohol = susPref.bebe_alcohol || '';
-
-    if (miAlcohol.length > 0 && miAlcohol === suAlcohol) {
-        score = score + 20;
-    } else if (
-        (miAlcohol === 'Ocasionalmente' && suAlcohol === 'No') ||
-        (miAlcohol === 'No' && suAlcohol === 'Ocasionalmente')
-    ) {
-        score = score + 10;
+    if (miUniversidad.length > 0 && suUniversidad.length > 0) {
+        if (miUniversidad === suUniversidad) {
+            puntajeAcademico = puntajeAcademico + 10;
+        }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BLOQUE D — Compatibilidad de horario (máx. 10 pts)
-    // ═══════════════════════════════════════════════════════════════════════════
-    const miHorario  = misPref.horario_preferido || '';
-    const suHorario  = susPref.horario_preferido || '';
+    let miSede = '';
+    if (miAcad.sede) {
+        miSede = String(miAcad.sede).toLowerCase().trim();
+    }
+
+    let suSede = '';
+    if (suAcad.sede) {
+        suSede = String(suAcad.sede).toLowerCase().trim();
+    }
+
+    if (miSede.length > 0 && suSede.length > 0) {
+        if (miSede === suSede) {
+            puntajeAcademico = puntajeAcademico + 6;
+        }
+    }
+
+    if (miCarrera.length > 0 && suCarrera.length > 0) {
+        if (miCarrera === suCarrera) {
+            puntajeAcademico = puntajeAcademico + 4;
+        }
+    }
+
+    if (puntajeAcademico > 20) {
+        puntajeAcademico = 20;
+    }
+
+    let puntosFuma = calcularPuntosHabitoTernario(misPref.fuma, susPref.fuma);
+    puntajeHabitos = puntajeHabitos + puntosFuma;
+
+    let puntosBebe = calcularPuntosHabitoTernario(misPref.bebe_alcohol, susPref.bebe_alcohol);
+    puntajeHabitos = puntajeHabitos + puntosBebe;
+
+    let puntosMascotas = 0;
+    let miMascotas = '';
+    if (misPref.mascotas) {
+        miMascotas = String(misPref.mascotas);
+    }
+
+    let suMascotas = '';
+    if (susPref.mascotas) {
+        suMascotas = String(susPref.mascotas);
+    }
+
+    if (miMascotas.length > 0 && suMascotas.length > 0) {
+        if (miMascotas === suMascotas) {
+            puntosMascotas = 7;
+        }
+    }
+
+    puntajeHabitos = puntajeHabitos + puntosMascotas;
+
+    if (puntajeHabitos > 21) {
+        puntajeHabitos = 21;
+    }
+
+    let miOrden = null;
+    if (misPref.nivel_orden !== null && misPref.nivel_orden !== undefined) {
+        miOrden = Number(misPref.nivel_orden);
+    }
+
+    let suOrden = null;
+    if (susPref.nivel_orden !== null && susPref.nivel_orden !== undefined) {
+        suOrden = Number(susPref.nivel_orden);
+    }
+
+    if (miOrden !== null && suOrden !== null) {
+        const diferenciaOrden = Math.abs(miOrden - suOrden);
+        const puntosOrden = calcularPuntosPorDiferenciaEscala(diferenciaOrden);
+        puntajeConvivencia = puntajeConvivencia + puntosOrden;
+    }
+
+    let miRuido = null;
+    if (misPref.nivel_ruido !== null && misPref.nivel_ruido !== undefined) {
+        miRuido = Number(misPref.nivel_ruido);
+    }
+
+    let suRuido = null;
+    if (susPref.nivel_ruido !== null && susPref.nivel_ruido !== undefined) {
+        suRuido = Number(susPref.nivel_ruido);
+    }
+
+    if (miRuido !== null && suRuido !== null) {
+        const diferenciaRuido = Math.abs(miRuido - suRuido);
+        const puntosRuido = calcularPuntosPorDiferenciaEscala(diferenciaRuido);
+        puntajeConvivencia = puntajeConvivencia + puntosRuido;
+    }
+
+    let miHorario = '';
+    if (misPref.horario_preferido) {
+        miHorario = String(misPref.horario_preferido);
+    }
+
+    let suHorario = '';
+    if (susPref.horario_preferido) {
+        suHorario = String(susPref.horario_preferido);
+    }
 
     let horarioCompatible = false;
 
-    if (miHorario === suHorario) {
-        horarioCompatible = true;
+    if (miHorario.length > 0 && suHorario.length > 0) {
+        if (miHorario === suHorario) {
+            horarioCompatible = true;
+        }
     }
+
     if (miHorario === 'Indiferente') {
         horarioCompatible = true;
     }
+
     if (suHorario === 'Indiferente') {
         horarioCompatible = true;
     }
 
     if (horarioCompatible) {
-        score = score + 10;
+        puntajeConvivencia = puntajeConvivencia + 8;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // NORMALIZACIÓN: garantizar rango estricto 0–100
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    if (score < 0) {
-        score = 0;
+    if (puntajeConvivencia > 24) {
+        puntajeConvivencia = 24;
     }
 
-    if (score > 100) {
-        score = 100;
+    const interesesYo = extraerInteresesDesdeUsuario(yo);
+    const interesesSu = extraerInteresesDesdeUsuario(candidato);
+    let cantidadCompartidos = 0;
+
+    for (let i = 0; i < interesesYo.length; i++) {
+        const interesActual = interesesYo[i];
+        let encontrado = false;
+
+        for (let j = 0; j < interesesSu.length; j++) {
+            const otroInteres = interesesSu[j];
+
+            if (interesActual === otroInteres) {
+                encontrado = true;
+                break;
+            }
+        }
+
+        if (encontrado) {
+            cantidadCompartidos = cantidadCompartidos + 1;
+        }
     }
 
-    return score;
+    puntajeIntereses = cantidadCompartidos * 5;
+
+    if (puntajeIntereses > 15) {
+        puntajeIntereses = 15;
+    }
+
+    puntajeTotal = puntajeTotal + puntajeAcademico;
+    puntajeTotal = puntajeTotal + puntajeHabitos;
+    puntajeTotal = puntajeTotal + puntajeConvivencia;
+    puntajeTotal = puntajeTotal + puntajeIntereses;
+
+    if (puntajeTotal > 100) {
+        puntajeTotal = 100;
+    }
+
+    if (puntajeTotal < 0) {
+        puntajeTotal = 0;
+    }
+
+    return Math.round(puntajeTotal);
 }
 
 // ─── ENDPOINT DE MATCHES (GET /api/usuarios/matches) ──────────────────────────
@@ -506,10 +679,9 @@ function calcularMatchScore(yo, candidato) {
  *
  * Flujo:
  *   1. Obtener el perfil completo del usuario autenticado.
- *   2. Determinar el rol opuesto (Buscador ↔ Anfitrion).
- *   3. Aplicar dealbreakers a nivel de consulta MongoDB (fuma, mascotas).
- *   4. Calcular matchScore para cada candidato superviviente.
- *   5. Ordenar y devolver el arreglo de resultados.
+ *   2. Consultar todos los candidatos (con o sin vivienda, cualquier rol).
+ *   3. Calcular matchScore suavizado para cada candidato.
+ *   4. Ordenar y devolver el arreglo de resultados.
  */
 const obtenerMatches = async (req, res) => {
     try {
@@ -532,42 +704,13 @@ const obtenerMatches = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario autenticado no encontrado.' });
         }
 
-        // ── 2. Determinar el rol opuesto ──────────────────────────────────────
-        let rolOpuesto;
+        // ── 2. Consultar candidatos (sin filtrar por rol ni alojamiento) ──────
 
-        if (yo.rol === 'Buscador') {
-            rolOpuesto = 'Anfitrion';
-        } else {
-            rolOpuesto = 'Buscador';
-        }
-
-        // ── 3. Construir filtros de MongoDB (dealbreakers en base de datos) ────
-        // Filtrar directamente en la consulta es más eficiente que hacerlo en memoria
+        // ── 3. Consultar candidatos ───────────────────────────────────────────
         const miObjectId = new mongoose.Types.ObjectId(String(miId));
+        const candidatos = await consultarCandidatosEmparejamiento(yo, miObjectId);
 
-        const queryFiltros = {
-            _id: { $ne: miObjectId },
-            rol: rolOpuesto,
-        };
-
-        const misPref = yo.preferencias_convivencia || {};
-
-        // Dealbreaker: ambiente libre de humo
-        if (misPref.fuma === 'No') {
-            queryFiltros['preferencias_convivencia.fuma'] = { $ne: 'Sí' };
-        }
-
-        // Dealbreaker: mascotas
-        if (misPref.mascotas === 'Sí') {
-            queryFiltros['preferencias_convivencia.mascotas'] = 'Sí';
-        }
-
-        // ── 4. Consultar candidatos supervivientes de los dealbreakers ─────────
-        const candidatos = await Usuario.find(queryFiltros)
-            .select('-password')
-            .lean();
-
-        // ── 4b. Cargar viviendas publicadas para calcular distancia en el frontend ──
+        // ── 4. Cargar viviendas publicadas para calcular distancia en el frontend ──
         const idsAlojamientos = [];
         for (const candidato of candidatos) {
             if (candidato.alojamientoId) {
@@ -596,12 +739,22 @@ const obtenerMatches = async (req, res) => {
                 continue;
             }
 
-            const puntuacion = calcularMatchScore(yo, candidato);
+            let puntuacion = 0;
+
+            try {
+                puntuacion = calcularMatchScore(yo, candidato);
+            } catch (errCalculo) {
+                console.error('Error al calcular matchScore para candidato:', idCandidato, errCalculo.message);
+                puntuacion = 20;
+            }
 
             let viviendaPublicada = null;
+
             if (candidato.alojamientoId) {
                 const claveVivienda = String(candidato.alojamientoId);
-                viviendaPublicada = mapaViviendas[claveVivienda] || null;
+                if (mapaViviendas[claveVivienda]) {
+                    viviendaPublicada = mapaViviendas[claveVivienda];
+                }
             }
 
             const usuarioEnriquecido = {
@@ -610,24 +763,73 @@ const obtenerMatches = async (req, res) => {
             };
 
             const entrada = {
-                matchScore:     puntuacion,
-                compatibilidad: `${puntuacion}%`,
-                usuario:        usuarioEnriquecido,
+                matchScore:         puntuacion,
+                porcentajeAfinidad: puntuacion,
+                compatibilidad:     `${puntuacion}%`,
+                usuario:            usuarioEnriquecido,
             };
 
             resultados.push(entrada);
         }
 
-        // ── 6. Ordenar de mayor a menor porcentaje de afinidad ─────────────────
+        // ── 6. Ordenar de mayor a menor y aplicar umbral con plan de contingencia ─
         resultados.sort(function (a, b) {
             return b.matchScore - a.matchScore;
         });
 
+        let resultadosFinales = filtrarPorUmbralConContingencia(resultados);
+
+        if (resultadosFinales.length === 0) {
+            resultadosFinales = await obtenerFallbackEmergencia(miObjectId);
+
+            const idsAlojamientosRescate = [];
+            for (const entradaRescate of resultadosFinales) {
+                const usuarioRescate = entradaRescate.usuario;
+                if (usuarioRescate && usuarioRescate.alojamientoId) {
+                    idsAlojamientosRescate.push(usuarioRescate.alojamientoId);
+                }
+            }
+
+            if (idsAlojamientosRescate.length > 0) {
+                const viviendasRescate = await Alojamiento.find({
+                    _id: { $in: idsAlojamientosRescate },
+                })
+                    .select('_id latitud longitud titulo sector comuna')
+                    .lean();
+
+                const mapaViviendasRescate = {};
+                for (const viviendaRescate of viviendasRescate) {
+                    mapaViviendasRescate[String(viviendaRescate._id)] = viviendaRescate;
+                }
+
+                for (let r = 0; r < resultadosFinales.length; r++) {
+                    const entradaActual = resultadosFinales[r];
+                    const candidatoRescate = entradaActual.usuario;
+
+                    if (!candidatoRescate) {
+                        continue;
+                    }
+
+                    if (!candidatoRescate.alojamientoId) {
+                        continue;
+                    }
+
+                    const claveRescate = String(candidatoRescate.alojamientoId);
+                    const viviendaRescate = mapaViviendasRescate[claveRescate] || null;
+
+                    entradaActual.usuario = {
+                        ...candidatoRescate,
+                        vivienda: viviendaRescate,
+                    };
+                }
+            }
+        }
+
         return res.status(200).json({
             exito:   true,
             miRol:   yo.rol,
-            total:   resultados.length,
-            data:    resultados,
+            total:   resultadosFinales.length,
+            data:    resultadosFinales,
         });
 
     } catch (err) {

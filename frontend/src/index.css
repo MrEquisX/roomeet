@@ -1,1 +1,24 @@
 @import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  html {
+    background-color: #FFFFFF;
+  }
+
+  body {
+    background-color: #FFFFFF;
+    color: #44403C;
+    font-family: Inter, system-ui, Segoe UI, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  a {
+    color: #784A3A;
+  }
+
+  a:hover {
+    color: #6F4E37;
+  }
+}

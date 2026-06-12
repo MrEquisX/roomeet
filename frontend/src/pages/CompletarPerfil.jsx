@@ -1,13 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  API_BASE,
   INTERESES_OPCIONES,
   OPCIONES_FUMA,
   OPCIONES_BEBE,
   OPCIONES_MASCOTAS,
   perfilCompletarIncompleto,
 } from '../utils/perfilHelpers';
+import { API_URL } from '../config/env.js';
 
 const OPCIONES_PREFERENCIA_ACADEMICA = [
   { valor: 'indiferente', etiqueta: 'Indiferente' },
@@ -22,8 +22,10 @@ const preferenciaAcademicaABoolean = (valor) => {
   return false;
 };
 
-const CompletarPerfil = () => {
+const CompletarPerfil = (props) => {
   const navigate = useNavigate();
+
+  const CROP_SIZE = 280;
 
   const [mensaje, setMensaje] = useState('');
   const [tipoMensaje, setTipoMensaje] = useState('error');
@@ -33,6 +35,14 @@ const CompletarPerfil = () => {
   const [biografia, setBiografia] = useState('');
   const [fotoPerfil, setFotoPerfil] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
+
+  const [imagenCrudaURL, setImagenCrudaURL] = useState(null);
+  const [mostrarModalCrop, setMostrarModalCrop] = useState(false);
+  const [imgDisplaySize, setImgDisplaySize] = useState({ w: CROP_SIZE, h: CROP_SIZE });
+  const [imgOffset, setImgOffset] = useState({ x: 0, y: 0 });
+  const [arrastrando, setArrastrando] = useState(false);
+  const [ultimaPos, setUltimaPos] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
 
   const [fuma, setFuma] = useState('No');
   const [bebeAlcohol, setBebeAlcohol] = useState('No');
@@ -48,9 +58,19 @@ const CompletarPerfil = () => {
   const [interesesSeleccionados, setInteresesSeleccionados] = useState([]);
 
   const fileInputRef = useRef(null);
+  const cropImgRef = useRef(null);
+
+  useEffect(() => {
+    setImgOffset((prev) => {
+      return {
+        x: Math.max(-(imgDisplaySize.w * zoom - CROP_SIZE), Math.min(0, prev.x)),
+        y: Math.max(-(imgDisplaySize.h * zoom - CROP_SIZE), Math.min(0, prev.y)),
+      };
+    });
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (!file) {
       return;
     }
@@ -63,13 +83,158 @@ const CompletarPerfil = () => {
 
     setMensaje('');
 
-    if (fotoPreview) {
-      URL.revokeObjectURL(fotoPreview);
+    const url = URL.createObjectURL(file);
+    setImagenCrudaURL(url);
+    setImgOffset({ x: 0, y: 0 });
+    setZoom(1);
+    setMostrarModalCrop(true);
+    e.target.value = '';
+  };
+
+  const handleCropImageLoad = () => {
+    const img = cropImgRef.current;
+    if (!img) {
+      return;
     }
 
-    const previewUrl = URL.createObjectURL(file);
-    setFotoPerfil(file);
-    setFotoPreview(previewUrl);
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    let w = CROP_SIZE;
+    let h = CROP_SIZE;
+
+    if (naturalWidth <= naturalHeight) {
+      w = CROP_SIZE;
+      h = Math.round(naturalHeight * CROP_SIZE / naturalWidth);
+    } else {
+      h = CROP_SIZE;
+      w = Math.round(naturalWidth * CROP_SIZE / naturalHeight);
+    }
+
+    setImgDisplaySize({ w: w, h: h });
+    setImgOffset({
+      x: -Math.round((w - CROP_SIZE) / 2),
+      y: -Math.round((h - CROP_SIZE) / 2),
+    });
+  };
+
+  const clampOffset = (x, y, w, h) => {
+    return {
+      x: Math.max(-(w - CROP_SIZE), Math.min(0, x)),
+      y: Math.max(-(h - CROP_SIZE), Math.min(0, y)),
+    };
+  };
+
+  const zoomedSize = () => {
+    return {
+      w: imgDisplaySize.w * zoom,
+      h: imgDisplaySize.h * zoom,
+    };
+  };
+
+  const handleCropMouseDown = (e) => {
+    setArrastrando(true);
+    setUltimaPos({ x: e.clientX, y: e.clientY });
+    e.preventDefault();
+  };
+
+  const handleCropMouseMove = (e) => {
+    if (!arrastrando) {
+      return;
+    }
+
+    const dx = e.clientX - ultimaPos.x;
+    const dy = e.clientY - ultimaPos.y;
+    const tamanioZoom = zoomedSize();
+
+    setImgOffset((prev) => {
+      return clampOffset(prev.x + dx, prev.y + dy, tamanioZoom.w, tamanioZoom.h);
+    });
+    setUltimaPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCropMouseUp = () => {
+    setArrastrando(false);
+  };
+
+  const handleCropTouchStart = (e) => {
+    const t = e.touches[0];
+    setArrastrando(true);
+    setUltimaPos({ x: t.clientX, y: t.clientY });
+  };
+
+  const handleCropTouchMove = (e) => {
+    if (!arrastrando) {
+      return;
+    }
+
+    const t = e.touches[0];
+    const dx = t.clientX - ultimaPos.x;
+    const dy = t.clientY - ultimaPos.y;
+    const tamanioZoom = zoomedSize();
+
+    setImgOffset((prev) => {
+      return clampOffset(prev.x + dx, prev.y + dy, tamanioZoom.w, tamanioZoom.h);
+    });
+    setUltimaPos({ x: t.clientX, y: t.clientY });
+  };
+
+  const aplicarCrop = () => {
+    const img = cropImgRef.current;
+    if (!img) {
+      return;
+    }
+
+    const displayW = imgDisplaySize.w * zoom;
+    const displayH = imgDisplaySize.h * zoom;
+    const scaleX = img.naturalWidth / displayW;
+    const scaleY = img.naturalHeight / displayH;
+    const srcX = -imgOffset.x;
+    const srcY = -imgOffset.y;
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 400;
+
+    canvas.getContext('2d').drawImage(
+      img,
+      srcX * scaleX,
+      srcY * scaleY,
+      CROP_SIZE * scaleX,
+      CROP_SIZE * scaleY,
+      0,
+      0,
+      400,
+      400
+    );
+
+    canvas.toBlob((blob) => {
+      const croppedFile = new File([blob], 'foto_perfil.jpg', { type: 'image/jpeg' });
+
+      if (fotoPreview && fotoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(fotoPreview);
+      }
+
+      setFotoPerfil(croppedFile);
+      setFotoPreview(URL.createObjectURL(blob));
+      setMostrarModalCrop(false);
+      setZoom(1);
+
+      if (imagenCrudaURL) {
+        URL.revokeObjectURL(imagenCrudaURL);
+      }
+
+      setImagenCrudaURL(null);
+    }, 'image/jpeg', 0.92);
+  };
+
+  const cancelarCrop = () => {
+    setMostrarModalCrop(false);
+
+    if (imagenCrudaURL) {
+      URL.revokeObjectURL(imagenCrudaURL);
+    }
+
+    setImagenCrudaURL(null);
+    setZoom(1);
   };
 
   const abrirSelectorFoto = () => {
@@ -135,13 +300,13 @@ const CompletarPerfil = () => {
         });
         formData.append('foto_perfil', fotoPerfil);
 
-        respuesta = await fetch(`${API_BASE}/api/usuarios/editar`, {
+        respuesta = await fetch(`${API_URL}/usuarios/editar`, {
           method: 'PUT',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
       } else {
-        respuesta = await fetch(`${API_BASE}/api/usuarios/editar`, {
+        respuesta = await fetch(`${API_URL}/usuarios/editar`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -521,6 +686,77 @@ const CompletarPerfil = () => {
                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
               >
                 Continuar igual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalCrop && imagenCrudaURL && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          onMouseMove={handleCropMouseMove}
+          onMouseUp={handleCropMouseUp}
+          onMouseLeave={handleCropMouseUp}
+        >
+          <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm flex flex-col items-center">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Encuadra tu foto</h3>
+            <div
+              className="relative overflow-hidden border-4 border-blue-500"
+              style={{
+                width: CROP_SIZE,
+                height: CROP_SIZE,
+                borderRadius: '50%',
+                cursor: arrastrando ? 'grabbing' : 'grab',
+              }}
+              onMouseDown={handleCropMouseDown}
+              onTouchStart={handleCropTouchStart}
+              onTouchMove={handleCropTouchMove}
+              onTouchEnd={() => {
+                setArrastrando(false);
+              }}
+            >
+              <img
+                ref={cropImgRef}
+                src={imagenCrudaURL}
+                alt="recorte"
+                draggable={false}
+                onLoad={handleCropImageLoad}
+                style={{
+                  width: imgDisplaySize.w * zoom,
+                  height: imgDisplaySize.h * zoom,
+                  transform: `translate(${imgOffset.x}px, ${imgOffset.y}px)`,
+                  maxWidth: 'none',
+                  display: 'block',
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="0.05"
+              value={zoom}
+              onChange={(e) => {
+                setZoom(Number(e.target.value));
+              }}
+              className="w-full mt-4 accent-blue-600"
+            />
+            <div className="flex gap-3 mt-4 w-full">
+              <button
+                type="button"
+                onClick={cancelarCrop}
+                className="flex-1 py-3 bg-gray-100 font-bold rounded-2xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={aplicarCrop}
+                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-2xl"
+              >
+                Aplicar
               </button>
             </div>
           </div>

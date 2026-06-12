@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
-
-const API_BASE = 'http://localhost:3000';
+import { API_BASE } from '../config/env.js';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {

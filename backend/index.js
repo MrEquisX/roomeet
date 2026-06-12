@@ -27,8 +27,18 @@ const chatsRoutes     = require('./src/routes/chats.routes');
 
 const app = express();
 
-// Configuración de CORS
-app.use(cors());
+let frontendOrigin = 'http://localhost:5173';
+
+if (process.env.FRONTEND_URL) {
+  frontendOrigin = process.env.FRONTEND_URL;
+}
+
+// Configuración de CORS — solo el origen del frontend autorizado
+app.use(cors({
+  origin: frontendOrigin,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+}));
 app.use(express.json());
 
 // Servir imágenes subidas: GET /uploads/perfiles/... o /uploads/alojamientos/...
@@ -73,9 +83,9 @@ const startServer = async () => {
         // 3. Inicializa Socket.io pasando el server
         const io = new Server(server, {
             cors: {
-                origin: "http://localhost:5173",
-                methods: ["GET", "POST"]
-            }
+                origin: frontendOrigin,
+                methods: ['GET', 'POST'],
+            },
         });
 
         // 4. Middleware de autenticación: rechaza conexiones sin token válido

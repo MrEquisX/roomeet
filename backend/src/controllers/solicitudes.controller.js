@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Solicitud = require('../models/Solicitud');
 const Alojamiento = require('../models/Alojamiento');
+const MatchUsuario = require('../models/MatchUsuario');
 
 const obtenerIdDesdeToken = (req) =>
     req.usuario?.id ?? req.usuario?.id_usuario;
@@ -74,6 +75,19 @@ const enviarSolicitud = async (req, res) => {
             id_usuario_objetivo,
             estado: 'Pendiente',
         });
+
+        const matchExistente = await MatchUsuario.findOne({
+            id_usuario:      id_usuario_interesado,
+            id_destinatario: id_usuario_objetivo,
+        });
+
+        if (!matchExistente) {
+            await MatchUsuario.create({
+                id_usuario:      id_usuario_interesado,
+                id_destinatario: id_usuario_objetivo,
+                es_mutuo:        false,
+            });
+        }
 
         return res.status(201).json({
             exito: true,

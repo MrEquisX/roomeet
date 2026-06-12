@@ -47,7 +47,15 @@ const obtenerAlojamientoPorId = async (req, res) => {
             return res.status(404).json({ error: 'Alojamiento no encontrado' });
         }
 
-        return res.status(200).json(alojamiento);
+        const respuesta = {
+            ...alojamiento,
+        };
+
+        if (alojamiento.id_anfitrion) {
+            respuesta.id_anfitrion = String(alojamiento.id_anfitrion);
+        }
+
+        return res.status(200).json(respuesta);
 
     } catch (err) {
         console.error('Error al obtener alojamiento:', err);

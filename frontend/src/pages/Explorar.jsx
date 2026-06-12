@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const API_BASE = 'http://localhost:3000';
+import { INTERESES_OPCIONES, normalizarInteresParaVista } from '../utils/perfilHelpers';
+import { API_BASE, API_URL } from '../config/env.js';
 
 const PRECIO_MAX_DEFAULT = 500000;
 const RADIO_KM_DEFAULT = 0;
@@ -9,37 +9,6 @@ const EDAD_MIN_DEFECTO = 17;
 const EDAD_MAX_DEFECTO = 35;
 
 const OPCIONES_TIPO_VIVIENDA = ['Indiferente', 'Con Vivienda', 'Sin Vivienda'];
-
-const INTERESES = [
-  'Fútbol',
-  'Gym',
-  'Videojuegos',
-  'Básquet',
-  'Música',
-  'Cine',
-  'Series',
-  'Cocinar',
-  'Automóviles',
-  'Juegos de Mesa',
-  'Moda',
-  'Shopping',
-  'Running',
-  'Fiesta',
-  'Leer',
-  'Bailar',
-  'Tenis',
-  'Pádel',
-  'Vóley',
-  'Natación',
-  'Disco',
-  'Trekking',
-  'Estudiar',
-  'Viajar',
-  'Dibujar',
-  'Karate',
-  'Judo',
-  'Boxeo',
-];
 
 const HABITOS = [
   {
@@ -828,18 +797,20 @@ const DrawerFiltros = (props) => {
   }
 
   const checkboxesIntereses = [];
-  for (const interes of INTERESES) {
+  for (const opcionInteres of INTERESES_OPCIONES) {
+    const interesNombre = opcionInteres.nombre;
+    const interesIcono = opcionInteres.icono;
     let marcado = false;
     const seleccionados = filtros.interesesSeleccionados || [];
 
     for (const item of seleccionados) {
-      if (item === interes) {
+      if (item === interesNombre) {
         marcado = true;
         break;
       }
     }
 
-    let claseCheckbox = 'px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all ';
+    let claseCheckbox = 'px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex items-center gap-1 ';
     if (marcado) {
       claseCheckbox = claseCheckbox + 'bg-blue-600 text-white border-blue-600';
     } else {
@@ -848,14 +819,15 @@ const DrawerFiltros = (props) => {
 
     checkboxesIntereses.push(
       <button
-        key={interes}
+        key={interesNombre}
         type="button"
         onClick={() => {
-          alternarInteres(interes);
+          alternarInteres(interesNombre);
         }}
         className={claseCheckbox}
       >
-        {interes}
+        <span>{interesIcono}</span>
+        {interesNombre}
       </button>
     );
   }
@@ -1214,9 +1186,9 @@ const Explorar = (props) => {
       };
 
       try {
-        const resUsuarios = await fetch(`${API_BASE}/api/usuarios`, { headers });
-        const resAlojamientos = await fetch(`${API_BASE}/api/alojamientos`, { headers });
-        const resPerfil = await fetch(`${API_BASE}/api/usuarios/mi-perfil`, { headers });
+        const resUsuarios = await fetch(`${API_URL}/usuarios`, { headers });
+        const resAlojamientos = await fetch(`${API_URL}/alojamientos`, { headers });
+        const resPerfil = await fetch(`${API_URL}/usuarios/mi-perfil`, { headers });
 
         if (!resUsuarios.ok || !resAlojamientos.ok) {
           throw new Error('Error al cargar datos de búsqueda.');
@@ -1503,6 +1475,19 @@ const Explorar = (props) => {
                   const vivienda = usuario.vivienda;
                   let precioVinculado = 0;
 
+                  const interesesUsuario = [];
+                  const interesesCrudosCard = usuario.intereses || [];
+
+                  for (const itemInteres of interesesCrudosCard) {
+                    const normalizado = normalizarInteresParaVista(itemInteres);
+                    if (normalizado.nombre) {
+                      interesesUsuario.push(normalizado);
+                    }
+                    if (interesesUsuario.length >= 3) {
+                      break;
+                    }
+                  }
+
                   if (vivienda) {
                     precioVinculado = obtenerPrecioMinimoAlojamiento(vivienda);
                   }
@@ -1523,9 +1508,6 @@ const Explorar = (props) => {
                             {nombre.charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <span className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
-                          👤 Persona
-                        </span>
                         {vivienda && (
                           <span className="absolute top-2 right-2 bg-green-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg">
                             🏠 Ofrece vivienda
@@ -1554,6 +1536,21 @@ const Explorar = (props) => {
                             🐾 {normalizarMascotas(pref.mascotas)}
                           </span>
                         </div>
+                        {interesesUsuario.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {interesesUsuario.map((itemInteres, idxInteres) => {
+                              return (
+                                <span
+                                  key={`${userId}-interes-${idxInteres}`}
+                                  className="text-[9px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+                                >
+                                  <span>{itemInteres.icono}</span>
+                                  {itemInteres.nombre}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                         {precioVinculado > 0 && (
                           <p className="text-[11px] text-green-600 font-bold mt-2">
                             Ofrece desde ${precioVinculado.toLocaleString('es-CL')}/mes

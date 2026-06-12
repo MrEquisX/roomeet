@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:3000/api';
+import { API_URL } from '../config/env.js';
 
 export const apiClient = {
   async request(endpoint, options = {}) {
@@ -30,7 +30,7 @@ export const apiClient = {
     }
 
     try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, config);
+      const response = await fetch(`${API_URL}${endpoint}`, config);
 
       // Si la sesión expiró (401), limpiar y redirigir
       if (response.status === 401) {

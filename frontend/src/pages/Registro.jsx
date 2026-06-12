@@ -5,7 +5,6 @@ import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
 import {
   universidadesChile,
-  API_BASE,
   ANIO_ACTUAL,
   ANIO_MIN_INGRESO,
   EDAD_MINIMA,
@@ -19,6 +18,7 @@ import {
   obtenerFechaMaxNacimiento,
   obtenerFechaMinNacimiento,
 } from '../utils/perfilHelpers';
+import { API_URL } from '../config/env.js';
 
 const customIcon = new Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -289,7 +289,7 @@ const Registro = () => {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/registro`, {
+      const res = await fetch(`${API_URL}/auth/registro`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -298,7 +298,7 @@ const Registro = () => {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 201) {
-        const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+        const loginRes = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

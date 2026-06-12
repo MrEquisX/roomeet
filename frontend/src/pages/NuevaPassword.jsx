@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { API_URL } from '../config/env.js';
 
 const NuevaPassword = () => {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ const NuevaPassword = () => {
     });
 
     try {
-      const res = await fetch("http://localhost:3000/api/auth/nueva-password", {
+      const res = await fetch(`${API_URL}/auth/nueva-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
