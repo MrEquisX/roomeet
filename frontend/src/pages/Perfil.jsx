@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { normalizarInteresParaVista } from '../utils/perfilHelpers';
 import { API_BASE, API_URL } from '../config/env.js';
+import CambiarContrasena from './CambiarContrasena';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {
@@ -37,6 +38,7 @@ const etiquetaRol = (rol) => {
 const Perfil = () => {
   const navigate = useNavigate();
   const [mostrarModalVivienda, setMostrarModalVivienda] = useState(false);
+  const [mostrarCambiarContrasena, setMostrarCambiarContrasena] = useState(false);
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [alojamiento, setAlojamiento] = useState(null);
@@ -188,6 +190,19 @@ const Perfil = () => {
             </button>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setMostrarCambiarContrasena(true);
+          }}
+          className="w-full mt-3 bg-white hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all border border-gray-200 shadow-sm"
+        >
+          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span className="text-sm">Cambiar Contraseña</span>
+        </button>
       </div>
 
       <div className="p-6 space-y-5">
@@ -401,6 +416,23 @@ const Perfil = () => {
           Cerrar Sesión
         </Link>
       </div>
+
+      {mostrarCambiarContrasena && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <CambiarContrasena
+              onClose={() => {
+                setMostrarCambiarContrasena(false);
+              }}
+              onExito={() => {
+                setTimeout(() => {
+                  setMostrarCambiarContrasena(false);
+                }, 1800);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {mostrarModalVivienda && (
         <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[60] px-4">

@@ -26,6 +26,12 @@ router.put(
     usuariosController.editarMiPerfil
 );
 
+router.put(
+    '/cambiar-password',
+    verificarToken,
+    usuariosController.cambiarPassword
+);
+
 // Actualizar perfil por ID (IDOR-protegido dentro del controlador)
 router.put(
     '/:id',

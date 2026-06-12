@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const Usuario = require('../models/Usuario');
 const Alojamiento = require('../models/Alojamiento');
 const {
@@ -916,6 +917,79 @@ const obtenerPerfilPublico = async (req, res) => {
     }
 };
 
+// ─── CAMBIAR CONTRASEÑA (usuario autenticado) ────────────────────────────────
+// PUT /api/usuarios/cambiar-password
+// Body: { contrasenaActual, nuevaContrasena }
+const cambiarPassword = async (req, res) => {
+    const contrasenaActual = req.body.contrasenaActual;
+    const nuevaContrasena = req.body.nuevaContrasena;
+
+    if (!contrasenaActual || !nuevaContrasena) {
+        return res.status(400).json({
+            mensaje: 'La contraseña actual y la nueva contraseña son obligatorias.',
+        });
+    }
+
+    if (typeof nuevaContrasena !== 'string' || nuevaContrasena.length < 8) {
+        return res.status(400).json({
+            mensaje: 'La nueva contraseña debe tener al menos 8 caracteres.',
+        });
+    }
+
+    if (contrasenaActual === nuevaContrasena) {
+        return res.status(400).json({
+            mensaje: 'La nueva contraseña debe ser diferente a la actual.',
+        });
+    }
+
+    const idUsuario = obtenerIdDesdeToken(req);
+
+    if (!idUsuario) {
+        return res.status(401).json({
+            mensaje: 'No se pudo identificar al usuario autenticado.',
+        });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(idUsuario)) {
+        return res.status(400).json({
+            mensaje: 'Identificador de usuario no válido.',
+        });
+    }
+
+    try {
+        const usuario = await Usuario.findById(idUsuario).select('+password');
+
+        if (!usuario) {
+            return res.status(404).json({
+                mensaje: 'Usuario no encontrado.',
+            });
+        }
+
+        const contrasenaCoincide = await bcrypt.compare(contrasenaActual, usuario.password);
+
+        if (!contrasenaCoincide) {
+            return res.status(401).json({
+                mensaje: 'La contraseña actual es incorrecta.',
+            });
+        }
+
+        const nuevaContrasenaHasheada = await bcrypt.hash(nuevaContrasena, 10);
+
+        usuario.password = nuevaContrasenaHasheada;
+        await usuario.save({ validateBeforeSave: false });
+
+        return res.status(200).json({
+            mensaje: '¡Tu contraseña se actualizó correctamente!',
+        });
+
+    } catch (err) {
+        console.error('[cambiarPassword] Error:', err);
+        return res.status(500).json({
+            mensaje: 'Error interno del servidor.',
+        });
+    }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -925,4 +999,5 @@ module.exports = {
     editarMiPerfil,
     obtenerMatches,
     obtenerPerfilPublico,
+    cambiarPassword,
 };
