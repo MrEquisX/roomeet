@@ -788,7 +788,22 @@ const Dashboard = (props) => {
     }
   };
 
-  // Swipe derecha (Aceptar) → registrar match y habilitar chat
+  // Ejecuta la acción según la dirección del swipe (estándar Tinder).
+  // derecha = Aceptar / Like | izquierda = Rechazar / Pasar
+  const ejecutarAccionPorDireccion = async (direction, cardUserId) => {
+    if (direction === 'right') {
+      if (cardUserId) {
+        await agregarMatchChat(cardUserId);
+      }
+      return;
+    }
+
+    if (direction === 'left') {
+      // Rechazar: no se crea match; el mazo avanza en handleCardLeftScreen.
+      return;
+    }
+  };
+
   const handleSwipe = (direction, cardIndex, cardUserId) => {
     const indiceSuperiorEsperado = longitudEstudiantesRef.current - 1;
 
@@ -796,11 +811,9 @@ const Dashboard = (props) => {
       return;
     }
 
-    if (direction === 'right') {
-      if (cardUserId) {
-        agregarMatchChat(cardUserId);
-      }
-    }
+    ejecutarAccionPorDireccion(direction, cardUserId).catch(function manejarErrorAccionSwipe(error) {
+      console.error('Error al procesar acción de swipe:', error);
+    });
   };
 
   // ── Llamado cuando la tarjeta sale de pantalla — persiste y elimina del mazo ─
@@ -892,7 +905,7 @@ const Dashboard = (props) => {
       if (refDeLaTarjeta && refDeLaTarjeta.current) {
         await refDeLaTarjeta.current.swipe(direction);
       } else {
-        handleSwipe(direction, indiceSuperiorGlobal, idUsuarioActivo);
+        await ejecutarAccionPorDireccion(direction, idUsuarioActivo);
         handleCardLeftScreen(direction, indiceSuperiorGlobal, idUsuarioActivo);
       }
     } finally {
@@ -1116,6 +1129,7 @@ const Dashboard = (props) => {
                         handleCardLeftScreen(dir, idxGlobal, idDelItem);
                       }}
                       preventSwipe={['up', 'down']}
+                      swipeRequirementType="position"
                       className="w-full h-full"
                     >
                       <EstudianteCard
