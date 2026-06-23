@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const MatchUsuario = require('../models/MatchUsuario');
+const RechazoUsuario = require('../models/RechazoUsuario');
 const Chat = require('../models/Chat');
 const Usuario = require('../models/Usuario');
+const { emitirAUsuario } = require('../socket');
 
 const obtenerIdDesdeToken = (req) => {
   return req.usuario?.id ?? req.usuario?.id_usuario;
@@ -16,12 +18,12 @@ const ordenarParticipantes = (idA, idB) => {
   return [idB, idA];
 };
 
-const buscarOCrearChat = async (idUsuario, idOtro) => {
+const crearChatMutuo = async (idUsuario, idOtro) => {
+  const [p1, p2] = ordenarParticipantes(idUsuario, idOtro);
   let chat = await Chat.findOne({
-    participantes: { $all: [idUsuario, idOtro], $size: 2 },
+    participantes: { $all: [p1, p2], $size: 2 },
   });
   if (!chat) {
-    const [p1, p2] = ordenarParticipantes(idUsuario, idOtro);
     chat = await Chat.create({ participantes: [p1, p2] });
   }
   return chat;
@@ -35,13 +37,122 @@ const calcularEsMutuo = async (idUsuario, idDestinatario) => {
   return !!reciproco;
 };
 
+const marcarMatchMutuo = async (idUsuario, idDestinatario) => {
+  await MatchUsuario.updateOne(
+    { id_usuario: idUsuario, id_destinatario: idDestinatario },
+    { es_mutuo: true }
+  );
+  await MatchUsuario.updateOne(
+    { id_usuario: idDestinatario, id_destinatario: idUsuario },
+    { es_mutuo: true }
+  );
+};
+
+const verificarMatchMutuo = async (idUsuario, idOtro) => {
+  const matchDirecto = await MatchUsuario.findOne({
+    id_usuario:      idUsuario,
+    id_destinatario: idOtro,
+    es_mutuo:        true,
+  });
+  const matchReciproco = await MatchUsuario.findOne({
+    id_usuario:      idOtro,
+    id_destinatario: idUsuario,
+    es_mutuo:        true,
+  });
+  return !!(matchDirecto && matchReciproco);
+};
+
+const formatearUsuarioNotificacion = (usuario) => ({
+  _id:            usuario._id,
+  nombre_completo: usuario.nombre_completo,
+  foto_perfil:    usuario.foto_perfil || '',
+  fecha_nacimiento: usuario.fecha_nacimiento,
+});
+
+const emitirNotificacionPendiente = async (idDestinatario, match, idRemitente) => {
+  const remitente = await Usuario.findById(idRemitente)
+    .select('nombre_completo foto_perfil fecha_nacimiento')
+    .lean();
+
+  if (!remitente) {
+    return;
+  }
+
+  emitirAUsuario(idDestinatario, 'nueva_notificacion', {
+    tipo:    'solicitud_match',
+    matchId: match._id,
+    from:    formatearUsuarioNotificacion(remitente),
+    createdAt: match.createdAt || new Date(),
+  });
+};
+
+const emitirMatchMutuo = async (idUsuario, idDestinatario, chatId) => {
+  const [usuarioA, usuarioB] = await Promise.all([
+    Usuario.findById(idUsuario).select('nombre_completo foto_perfil fecha_nacimiento').lean(),
+    Usuario.findById(idDestinatario).select('nombre_completo foto_perfil fecha_nacimiento').lean(),
+  ]);
+
+  if (usuarioA) {
+    emitirAUsuario(idDestinatario, 'match_mutuo', {
+      tipo:    'match_mutuo',
+      chatId:  chatId,
+      es_mutuo: true,
+      usuario: formatearUsuarioNotificacion(usuarioA),
+    });
+  }
+
+  if (usuarioB) {
+    emitirAUsuario(idUsuario, 'match_mutuo', {
+      tipo:    'match_mutuo',
+      chatId:  chatId,
+      es_mutuo: true,
+      usuario: formatearUsuarioNotificacion(usuarioB),
+    });
+  }
+};
+
+/**
+ * IDs que no deben aparecer en el mazo de swipe del usuario autenticado.
+ */
+const obtenerIdsExcluidosDelSwipe = async (miId) => {
+  const miObjectId = new mongoose.Types.ObjectId(String(miId));
+  const excluidos = new Set();
+
+  const [aceptadosPorMi, rechazadosPorMi, likesRecibidos, rechazosRecibidos, mutuos] = await Promise.all([
+    MatchUsuario.find({ id_usuario: miObjectId }).select('id_destinatario').lean(),
+    RechazoUsuario.find({ id_usuario: miObjectId }).select('id_destinatario').lean(),
+    MatchUsuario.find({ id_destinatario: miObjectId, es_mutuo: false }).select('id_usuario').lean(),
+    RechazoUsuario.find({ id_destinatario: miObjectId }).select('id_usuario').lean(),
+    MatchUsuario.find({ $or: [{ id_usuario: miObjectId }, { id_destinatario: miObjectId }], es_mutuo: true })
+      .select('id_usuario id_destinatario')
+      .lean(),
+  ]);
+
+  for (const item of aceptadosPorMi) {
+    excluidos.add(String(item.id_destinatario));
+  }
+  for (const item of rechazadosPorMi) {
+    excluidos.add(String(item.id_destinatario));
+  }
+  for (const item of likesRecibidos) {
+    excluidos.add(String(item.id_usuario));
+  }
+  for (const item of rechazosRecibidos) {
+    excluidos.add(String(item.id_usuario));
+  }
+  for (const item of mutuos) {
+    const otro = String(item.id_usuario) === String(miId)
+      ? String(item.id_destinatario)
+      : String(item.id_usuario);
+    excluidos.add(otro);
+  }
+
+  return excluidos;
+};
+
 const UMBRAL_AFINIDAD_IDEAL = 18;
 const MAX_PERFILES_CONTINGENCIA = 50;
 
-/**
- * Si ningún perfil supera el umbral ideal, devuelve los de mayor puntuación
- * para que el Dashboard nunca quede vacío en demostraciones.
- */
 const filtrarPorUmbralConContingencia = (resultados) => {
   const sobreUmbral = [];
 
@@ -71,9 +182,6 @@ const filtrarPorUmbralConContingencia = (resultados) => {
   return contingencia;
 };
 
-/**
- * Consulta todos los candidatos excepto el usuario actual (con o sin vivienda, cualquier rol).
- */
 const consultarCandidatosEmparejamiento = async (yo, miObjectId) => {
   const candidatos = await Usuario.find({
     _id: { $ne: miObjectId },
@@ -91,35 +199,36 @@ const generarPuntuacionRescateAleatoria = () => {
   const maximo = 70;
   const rango = maximo - minimo + 1;
   const aleatorio = Math.floor(Math.random() * rango);
-  const puntuacion = minimo + aleatorio;
-  return puntuacion;
+  return minimo + aleatorio;
 };
 
-/**
- * Plan B de emergencia: devuelve hasta 15 usuarios aleatorios con afinidad simulada 40–70%.
- */
-const obtenerFallbackEmergencia = async (miObjectId) => {
+const obtenerFallbackEmergencia = async (miObjectId, idsExcluidos) => {
   const usuariosRescate = await Usuario.find({
     _id: { $ne: miObjectId },
   })
     .select('-password')
-    .limit(CANTIDAD_RESCATE_EMERGENCIA)
+    .limit(CANTIDAD_RESCATE_EMERGENCIA * 3)
     .lean();
 
   const resultadosRescate = [];
 
   for (const candidato of usuariosRescate) {
-    const puntuacion = generarPuntuacionRescateAleatoria();
+    if (idsExcluidos.has(String(candidato._id))) {
+      continue;
+    }
 
-    const entrada = {
+    const puntuacion = generarPuntuacionRescateAleatoria();
+    resultadosRescate.push({
       matchScore:         puntuacion,
       porcentajeAfinidad: puntuacion,
       compatibilidad:     `${puntuacion}%`,
       esRescate:          true,
       usuario:            candidato,
-    };
+    });
 
-    resultadosRescate.push(entrada);
+    if (resultadosRescate.length >= CANTIDAD_RESCATE_EMERGENCIA) {
+      break;
+    }
   }
 
   resultadosRescate.sort(function (a, b) {
@@ -129,7 +238,7 @@ const obtenerFallbackEmergencia = async (miObjectId) => {
   return resultadosRescate;
 };
 
-// POST /api/matches  — Aceptar perfil (swipe derecha)
+// POST /api/matches — Aceptar perfil (swipe derecha o campana de notificaciones)
 const crearMatch = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
   const { id_destinatario } = req.body;
@@ -147,7 +256,15 @@ const crearMatch = async (req, res) => {
   }
 
   try {
-    const destinatarioExiste = await Usuario.findById(id_destinatario).select('_id');
+    const rechazoPrevio = await RechazoUsuario.findOne({
+      id_usuario:      idUsuario,
+      id_destinatario: id_destinatario,
+    });
+    if (rechazoPrevio) {
+      return res.status(409).json({ mensaje: 'Ya rechazaste a este usuario.' });
+    }
+
+    const destinatarioExiste = await Usuario.findById(id_destinatario).select('_id nombre_completo foto_perfil');
     if (!destinatarioExiste) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
     }
@@ -166,33 +283,47 @@ const crearMatch = async (req, res) => {
     }
 
     const esMutuo = await calcularEsMutuo(idUsuario, id_destinatario);
-    if (esMutuo && !match.es_mutuo) {
+    let chat = null;
+
+    if (esMutuo) {
+      await marcarMatchMutuo(idUsuario, id_destinatario);
       match.es_mutuo = true;
       await match.save();
-      await MatchUsuario.updateOne(
-        { id_usuario: id_destinatario, id_destinatario: idUsuario },
-        { es_mutuo: true }
-      );
+      chat = await crearChatMutuo(idUsuario, id_destinatario);
+      await emitirMatchMutuo(idUsuario, id_destinatario, chat._id);
+    } else {
+      await emitirNotificacionPendiente(id_destinatario, match, idUsuario);
     }
 
-    const chat = await buscarOCrearChat(idUsuario, id_destinatario);
+    const mensaje = esMutuo
+      ? '¡Match mutuo! Ya pueden chatear.'
+      : 'Solicitud enviada. Espera a que el otro usuario acepte.';
 
     return res.status(201).json({
       exito: true,
-      mensaje: 'Match registrado. Ya puedes chatear.',
+      mensaje,
       data: {
         match,
-        chatId: chat._id,
+        chatId: chat ? chat._id : null,
         es_mutuo: esMutuo,
       },
     });
   } catch (error) {
     if (error.code === 11000) {
-      const chat = await buscarOCrearChat(idUsuario, id_destinatario);
+      const matchExistente = await MatchUsuario.findOne({
+        id_usuario:      idUsuario,
+        id_destinatario: id_destinatario,
+      });
+      const esMutuo = matchExistente?.es_mutuo || await verificarMatchMutuo(idUsuario, id_destinatario);
+      let chatId = null;
+      if (esMutuo) {
+        const chat = await crearChatMutuo(idUsuario, id_destinatario);
+        chatId = chat._id;
+      }
       return res.status(200).json({
         exito: true,
         mensaje: 'Ya habías aceptado a este usuario.',
-        data: { chatId: chat._id },
+        data: { chatId, es_mutuo: esMutuo },
       });
     }
     console.error('Error al crear match:', error);
@@ -200,12 +331,110 @@ const crearMatch = async (req, res) => {
   }
 };
 
-// GET /api/matches — Lista de usuarios aceptados por mí (para chats)
+// POST /api/matches/rechazar — Rechazar perfil (swipe izquierda o campana)
+const rechazarMatch = async (req, res) => {
+  const idUsuario = obtenerIdDesdeToken(req);
+  const { id_destinatario } = req.body;
+
+  if (!id_destinatario) {
+    return res.status(400).json({ mensaje: 'id_destinatario es obligatorio.' });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(id_destinatario)) {
+    return res.status(400).json({ mensaje: 'id_destinatario inválido.' });
+  }
+
+  if (String(id_destinatario) === String(idUsuario)) {
+    return res.status(400).json({ mensaje: 'Operación inválida.' });
+  }
+
+  try {
+    await RechazoUsuario.updateOne(
+      { id_usuario: idUsuario, id_destinatario: id_destinatario },
+      { id_usuario: idUsuario, id_destinatario: id_destinatario },
+      { upsert: true }
+    );
+
+    return res.status(200).json({
+      exito: true,
+      mensaje: 'Perfil rechazado.',
+    });
+  } catch (error) {
+    console.error('Error al rechazar match:', error);
+    return res.status(500).json({ mensaje: 'Error al registrar el rechazo.' });
+  }
+};
+
+// GET /api/matches/notificaciones — Solicitudes pendientes (alguien te aceptó, tú aún no respondes)
+const obtenerNotificacionesPendientes = async (req, res) => {
+  const idUsuario = obtenerIdDesdeToken(req);
+
+  try {
+    const likesRecibidos = await MatchUsuario.find({
+      id_destinatario: idUsuario,
+      es_mutuo:        false,
+    })
+      .populate('id_usuario', 'nombre_completo foto_perfil fecha_nacimiento perfil_academico')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const [misAceptaciones, misRechazos] = await Promise.all([
+      MatchUsuario.find({ id_usuario: idUsuario }).select('id_destinatario').lean(),
+      RechazoUsuario.find({ id_usuario: idUsuario }).select('id_destinatario').lean(),
+    ]);
+
+    const idsRespondidos = new Set();
+    for (const item of misAceptaciones) {
+      idsRespondidos.add(String(item.id_destinatario));
+    }
+    for (const item of misRechazos) {
+      idsRespondidos.add(String(item.id_destinatario));
+    }
+
+    const pendientes = [];
+
+    for (const item of likesRecibidos) {
+      const remitente = item.id_usuario;
+      if (!remitente) {
+        continue;
+      }
+      if (idsRespondidos.has(String(remitente._id))) {
+        continue;
+      }
+
+      pendientes.push({
+        matchId:   item._id,
+        createdAt: item.createdAt,
+        from: {
+          _id:             remitente._id,
+          nombre_completo: remitente.nombre_completo,
+          foto_perfil:     remitente.foto_perfil,
+          fecha_nacimiento: remitente.fecha_nacimiento,
+          perfil_academico: remitente.perfil_academico,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      exito: true,
+      total: pendientes.length,
+      data:  pendientes,
+    });
+  } catch (error) {
+    console.error('Error al obtener notificaciones:', error);
+    return res.status(500).json({ mensaje: 'Error al cargar notificaciones.' });
+  }
+};
+
+// GET /api/matches — Matches mutuos confirmados (para chats)
 const obtenerMisMatches = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
 
   try {
-    const matches = await MatchUsuario.find({ id_usuario: idUsuario })
+    const matches = await MatchUsuario.find({
+      id_usuario: idUsuario,
+      es_mutuo:   true,
+    })
       .populate('id_destinatario', 'nombre_completo foto_perfil fecha_nacimiento')
       .sort({ createdAt: -1 })
       .lean();
@@ -218,13 +447,18 @@ const obtenerMisMatches = async (req, res) => {
         continue;
       }
 
-      const chat = await buscarOCrearChat(idUsuario, otro._id);
+      const esMutuo = await verificarMatchMutuo(idUsuario, otro._id);
+      if (!esMutuo) {
+        continue;
+      }
+
+      const chat = await crearChatMutuo(idUsuario, otro._id);
 
       resultado.push({
-        matchId:   item._id,
-        chatId:    chat._id,
-        es_mutuo:  item.es_mutuo,
-        usuario:   otro,
+        matchId:  item._id,
+        chatId:   chat._id,
+        es_mutuo: true,
+        usuario:  otro,
       });
     }
 
@@ -240,11 +474,16 @@ const obtenerMisMatches = async (req, res) => {
 
 module.exports = {
   crearMatch,
+  rechazarMatch,
+  obtenerNotificacionesPendientes,
   obtenerMisMatches,
-  buscarOCrearChat,
+  crearChatMutuo,
   ordenarParticipantes,
+  verificarMatchMutuo,
+  obtenerIdsExcluidosDelSwipe,
   filtrarPorUmbralConContingencia,
   consultarCandidatosEmparejamiento,
   obtenerFallbackEmergencia,
+  emitirNotificacionPendiente,
   UMBRAL_AFINIDAD_IDEAL,
 };

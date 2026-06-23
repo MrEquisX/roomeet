@@ -1,9 +1,11 @@
 import TinderCard from 'react-tinder-card';
-import { useEffect, useState, createRef, useMemo, useRef } from 'react';
+import { useEffect, useState, createRef, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
 import { calcularAfinidad, normalizarInteresParaVista } from '../utils/perfilHelpers';
 import { API_BASE } from '../config/env.js';
+import NotificationBell from '../components/NotificationBell.jsx';
+import Toast from '../components/Toast.jsx';
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -685,6 +687,13 @@ const Dashboard = (props) => {
   const [miUbicacion, setMiUbicacion]     = useState(null);
   const [miPerfil, setMiPerfil]             = useState(null);
   const [mazoCompletado, setMazoCompletado] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const cerrarToast = useCallback(() => setToast(null), []);
+
+  const mostrarToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+  }, []);
 
   // Índice de la tarjeta que está en la cima del mazo.
   // -1 = mazo vacío / todas las tarjetas ya fueron deslizadas.
@@ -779,12 +788,39 @@ const Dashboard = (props) => {
 
   const agregarMatchChat = async (userId) => {
     if (!userId) {
-      return;
+      return false;
     }
     try {
-      await apiClient.post('/matches', { id_destinatario: String(userId) });
+      const respuesta = await apiClient.post('/matches', { id_destinatario: String(userId) });
+
+      if (respuesta?.data?.es_mutuo) {
+        mostrarToast('¡Match mutuo! Ya pueden chatear.', 'success');
+      } else {
+        mostrarToast('Solicitud enviada. Espera su respuesta en la campana.', 'success');
+      }
+      return true;
     } catch (error) {
-      console.error('Error al registrar match:', error);
+      const mensaje = error?.status === 429
+        ? 'Demasiados swipes. Espera un momento e intenta de nuevo.'
+        : (error?.message || 'No se pudo enviar la solicitud.');
+      mostrarToast(mensaje, 'error');
+      return false;
+    }
+  };
+
+  const rechazarMatch = async (userId) => {
+    if (!userId) {
+      return false;
+    }
+    try {
+      await apiClient.post('/matches/rechazar', { id_destinatario: String(userId) });
+      return true;
+    } catch (error) {
+      const mensaje = error?.status === 429
+        ? 'Demasiadas acciones. Espera un momento.'
+        : (error?.message || 'No se pudo registrar el rechazo.');
+      mostrarToast(mensaje, 'error');
+      return false;
     }
   };
 
@@ -799,7 +835,9 @@ const Dashboard = (props) => {
     }
 
     if (direction === 'left') {
-      // Rechazar: no se crea match; el mazo avanza en handleCardLeftScreen.
+      if (cardUserId) {
+        await rechazarMatch(cardUserId);
+      }
       return;
     }
   };
@@ -984,6 +1022,9 @@ const Dashboard = (props) => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative overflow-x-hidden">
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={cerrarToast} />
+      )}
 
       {/* ── HEADER ── */}
       <div className="bg-white px-6 pt-8 pb-5 shadow-sm rounded-b-3xl sticky top-0 z-40">
@@ -997,6 +1038,7 @@ const Dashboard = (props) => {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <button
               type="button"
               onClick={() => navigate('/explorar')}
@@ -1025,7 +1067,7 @@ const Dashboard = (props) => {
           <div>
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Estudiantes más afines</h3>
             <p className="text-xs text-gray-400 mt-0.5">
-              Acepta para conectar · Los matches van directo a tu chat
+              Acepta para enviar solicitud · Responde pendientes en la campana
             </p>
           </div>
           {!cargando && estudiantesAfines.length > 0 && (

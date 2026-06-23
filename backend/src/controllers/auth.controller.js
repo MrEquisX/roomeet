@@ -1,19 +1,12 @@
-const bcrypt     = require('bcrypt');
-const jwt        = require('jsonwebtoken');
-const crypto     = require('crypto');
-const nodemailer = require('nodemailer');
-const Usuario    = require('../models/Usuario');
-
-// ─── Transporte de correo (instancia única reutilizable) ──────────────────────
-const crearTransporte = () => nodemailer.createTransport({
-    host:   process.env.EMAIL_HOST   || 'smtp.gmail.com',
-    port:   Number(process.env.EMAIL_PORT) || 587,
-    secure: false,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-    },
-});
+const bcrypt  = require('bcrypt');
+const jwt     = require('jsonwebtoken');
+const crypto  = require('crypto');
+const Usuario = require('../models/Usuario');
+const {
+    isSmtpConfigured,
+    buildFrontendUrl,
+    sendPasswordResetEmail,
+} = require('../utils/mailer');
 
 // ─── REGISTRO ─────────────────────────────────────────────────────────────────
 // POST /api/auth/registro
@@ -105,8 +98,6 @@ const registrarUsuario = async (req, res) => {
 // GET /api/auth/verificar-email?token=<tokenPlano>
 const verificarEmail = async (req, res) => {
     const { token } = req.query;
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-
     if (!token) {
         return res.status(400).json({ msg: 'Token de verificación requerido.' });
     }
@@ -120,8 +111,7 @@ const verificarEmail = async (req, res) => {
         }).select('+emailVerificacionToken +emailVerificacionExpires');
 
         if (!usuario) {
-            // Token inválido o expirado → redirigir con error
-            return res.redirect(`${frontendUrl}/login?verificacion=expirado`);
+            return res.redirect(buildFrontendUrl('login?verificacion=expirado'));
         }
 
         usuario.emailVerificado          = true;
@@ -129,12 +119,11 @@ const verificarEmail = async (req, res) => {
         usuario.emailVerificacionExpires = undefined;
         await usuario.save({ validateBeforeSave: false });
 
-        // Redirigir al login con bandera de éxito
-        return res.redirect(`${frontendUrl}/login?verificado=true`);
+        return res.redirect(buildFrontendUrl('login?verificado=true'));
 
     } catch (error) {
         console.error('[verificarEmail] Error:', error.message);
-        return res.redirect(`${frontendUrl}/login?verificacion=error`);
+        return res.redirect(buildFrontendUrl('login?verificacion=error'));
     }
 };
 
@@ -192,18 +181,28 @@ const loginUsuario = async (req, res) => {
 // ─── SOLICITAR RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────
 // POST /api/auth/recuperar-password  →  { email }
 const olvideMiPassword = async (req, res) => {
-    const { email } = req.body;
+    const emailNormalizado = typeof req.body.email === 'string'
+        ? req.body.email.trim().toLowerCase()
+        : '';
 
-    if (!email) {
+    if (!emailNormalizado) {
         return res.status(400).json({ msg: 'El correo es obligatorio.' });
     }
 
-    try {
-        const usuario = await Usuario.findOne({ email });
+    if (!isSmtpConfigured()) {
+        console.error('[olvideMiPassword] SMTP no configurado (SMTP_USER / SMTP_PASS).');
+        return res.status(503).json({
+            msg: 'El servicio de correo no está disponible. Intenta más tarde.',
+        });
+    }
 
-        // Respuesta genérica para no revelar si el correo existe
+    const mensajeExito = 'Si el correo existe recibirás un enlace en breve.';
+
+    try {
+        const usuario = await Usuario.findOne({ email: emailNormalizado });
+
         if (!usuario) {
-            return res.status(200).json({ msg: 'Si el correo existe recibirás un enlace en breve.' });
+            return res.status(200).json({ msg: mensajeExito });
         }
 
         const tokenPlano = crypto.randomBytes(32).toString('hex');
@@ -213,41 +212,29 @@ const olvideMiPassword = async (req, res) => {
         usuario.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
         await usuario.save({ validateBeforeSave: false });
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const enlace      = `${frontendUrl}/nueva-password?token=${tokenPlano}`;
-
         try {
-            const transporte = crearTransporte();
-            await transporte.sendMail({
-                from:    `"Roomeet" <${process.env.EMAIL_USER}>`,
-                to:      usuario.email,
-                subject: 'Recuperación de contraseña — Roomeet',
-                html: `
-                    <div style="font-family:sans-serif;max-width:480px;margin:auto">
-                        <h2 style="color:#1d4ed8">Recupera tu contraseña</h2>
-                        <p>Hola <strong>${usuario.nombre_completo}</strong>,</p>
-                        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Roomeet.</p>
-                        <p>Haz clic en el botón para crear una nueva contraseña. Este enlace es válido por <strong>1 hora</strong>.</p>
-                        <a href="${enlace}"
-                           style="display:inline-block;margin:20px 0;padding:14px 28px;background:#1d4ed8;color:#fff;border-radius:12px;text-decoration:none;font-weight:bold;">
-                            Restablecer contraseña
-                        </a>
-                        <p style="color:#6b7280;font-size:13px">Si no solicitaste esto, ignora este correo.</p>
-                        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-                        <p style="color:#9ca3af;font-size:11px">Equipo Roomeet · Chile</p>
-                    </div>
-                `,
+            await sendPasswordResetEmail({
+                to:         usuario.email,
+                nombre:     usuario.nombre_completo,
+                tokenPlano,
             });
         } catch (mailError) {
             console.error('[olvideMiPassword] Error al enviar correo:', mailError.message);
+
+            usuario.resetPasswordToken   = undefined;
+            usuario.resetPasswordExpires = undefined;
+            await usuario.save({ validateBeforeSave: false });
+
             if (process.env.NODE_ENV !== 'production') {
-                console.error('[olvideMiPassword] Token de recuperación generado (solo dev):', tokenPlano);
+                console.error('[olvideMiPassword] Token de recuperación (solo dev):', tokenPlano);
             }
+
+            return res.status(503).json({
+                msg: 'No pudimos enviar el correo de recuperación. Verifica la configuración SMTP o intenta más tarde.',
+            });
         }
 
-        return res.status(200).json({
-            msg: 'Si el correo existe recibirás un enlace en breve.',
-        });
+        return res.status(200).json({ msg: mensajeExito });
 
     } catch (error) {
         console.error('[olvideMiPassword] Error:', error.message);

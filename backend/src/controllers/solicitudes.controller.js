@@ -82,11 +82,14 @@ const enviarSolicitud = async (req, res) => {
         });
 
         if (!matchExistente) {
-            await MatchUsuario.create({
+            const nuevoMatch = await MatchUsuario.create({
                 id_usuario:      id_usuario_interesado,
                 id_destinatario: id_usuario_objetivo,
                 es_mutuo:        false,
             });
+
+            const { emitirNotificacionPendiente } = require('./matches.controller');
+            await emitirNotificacionPendiente(id_usuario_objetivo, nuevoMatch, id_usuario_interesado);
         }
 
         return res.status(201).json({

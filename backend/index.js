@@ -15,6 +15,8 @@ const { Server } = require('socket.io');
 
 // Importamos la función de conexión a MongoDB
 const { connectDB } = require('./database');
+const { setIO } = require('./src/socket');
+const { matchesLimiter } = require('./src/middlewares/rateLimiter');
 
 // 1. Importamos todas nuestras rutas de la carpeta src/routes
 const usuariosRoutes = require('./src/routes/usuarios.routes');
@@ -25,19 +27,23 @@ const favoritosRoutes = require('./src/routes/favoritos.routes');
 const matchesRoutes   = require('./src/routes/matches.routes');
 const chatsRoutes     = require('./src/routes/chats.routes');
 
+const corsOrigenes = [
+    process.env.FRONTEND_URL,
+    'https://roomeet-owsw.vercel.app',
+    'capacitor://localhost',
+].filter(Boolean);
+
 const corsOptions = {
-    origin: [
-        'https://roomeet-owsw.vercel.app',
-        'http://localhost:5173',
-        'http://localhost',
-        'capacitor://localhost',
-    ],
+    origin: corsOrigenes,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 const app = express();
+
+// Render usa un proxy inverso; necesario para que rate-limit lea la IP real (X-Forwarded-For)
+app.set('trust proxy', 1);
 
 console.log('[CORS] Orígenes autorizados:', corsOptions.origin.join(', '));
 
@@ -64,7 +70,7 @@ app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/favoritos', favoritosRoutes);
 
 // Matches (aceptar perfil → chat) y conversaciones
-app.use('/api/matches', matchesRoutes);
+app.use('/api/matches', matchesLimiter, matchesRoutes);
 app.use('/api/chats', chatsRoutes);
 
 // Ruta de bienvenida opcional
@@ -88,7 +94,8 @@ const startServer = async () => {
             cors: corsOptions,
         });
 
-        // 4. Middleware de autenticación: rechaza conexiones sin token válido
+        setIO(io);
+
         io.use((socket, next) => {
             const token = socket.handshake.auth?.token;
 
@@ -104,18 +111,7 @@ const startServer = async () => {
             }
         });
 
-        // 5. Bloque de conexión y eventos de chat
-        io.on('connection', (socket) => {
-            socket.on('joinChat', (chatId) => {
-                socket.join(chatId);
-            });
-
-            socket.on('enviarMensaje', (data) => {
-                if (data && data.chatId && data.mensaje) {
-                    socket.to(data.chatId).emit('nuevoMensaje', data.mensaje);
-                }
-            });
-        });
+        registrarHandlersSocket(io);
 
         // 6. Arranque del servidor HTTP + WebSockets
         server.listen(PORT, () => {

@@ -234,7 +234,7 @@ const Chats = () => {
             {!busqueda && (
               <>
                 <p className="text-gray-400 text-sm mt-2 max-w-[260px] mx-auto">
-                  Acepta perfiles en el Dashboard para iniciar un chat
+                  Cuando tengas un match mutuo, tus conversaciones aparecerán aquí
                 </p>
                 <button
                   type="button"

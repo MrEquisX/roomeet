@@ -9,12 +9,15 @@ const {
     resetPassword,
 } = require('../controllers/auth.controller');
 
-router.post('/registro',            registrarUsuario);
-router.get ('/verificar-email',     verificarEmail);   // ← enlace que llega por correo
-router.post('/login',               loginUsuario);
+const {
+    authStrictLimiter,
+    authGeneralLimiter,
+} = require('../middlewares/rateLimiter');
 
-// Recuperación de contraseña
-router.post('/recuperar-password',  olvideMiPassword);
-router.post('/nueva-password',      resetPassword);
+router.post('/registro',            authGeneralLimiter, registrarUsuario);
+router.get ('/verificar-email',     authGeneralLimiter, verificarEmail);
+router.post('/login',               authStrictLimiter,  loginUsuario);
+router.post('/recuperar-password',  authStrictLimiter,  olvideMiPassword);
+router.post('/nueva-password',      authGeneralLimiter, resetPassword);
 
 module.exports = router;

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { normalizarInteresParaVista } from '../utils/perfilHelpers';
 import { API_BASE, API_URL } from '../config/env.js';
+import { disconnectSocket } from '../services/socketService';
 import CambiarContrasena from './CambiarContrasena';
 
 const getImageUrl = (ruta) => {
@@ -410,6 +411,7 @@ const Perfil = () => {
           to="/login"
           className="w-full block text-center bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 rounded-2xl border border-red-100 transition-colors mt-4"
           onClick={() => {
+            disconnectSocket();
             localStorage.removeItem('token');
           }}
         >

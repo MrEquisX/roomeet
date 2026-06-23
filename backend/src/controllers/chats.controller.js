@@ -3,7 +3,9 @@ const Chat = require('../models/Chat');
 const Mensaje = require('../models/Mensaje');
 const Usuario = require('../models/Usuario');
 const MatchUsuario = require('../models/MatchUsuario');
-const { buscarOCrearChat } = require('./matches.controller');
+const { crearChatMutuo, verificarMatchMutuo } = require('./matches.controller');
+const { getIO } = require('../socket');
+const { sanitizarTexto, MAX_MENSAJE_LENGTH } = require('../utils/sanitize');
 
 const obtenerIdDesdeToken = (req) => {
   return req.usuario?.id ?? req.usuario?.id_usuario;
@@ -66,7 +68,17 @@ const obtenerOtroParticipante = (chat, idUsuario) => {
   return null;
 };
 
-// GET /api/chats
+const obtenerOtroIdDesdeChat = (chat, idUsuario) => {
+  for (const p of chat.participantes) {
+    const pid = String(p._id || p);
+    if (pid !== String(idUsuario)) {
+      return p._id || p;
+    }
+  }
+  return null;
+};
+
+// GET /api/chats — Solo conversaciones con match mutuo
 const listarChats = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
 
@@ -81,20 +93,13 @@ const listarChats = async (req, res) => {
     const resultado = [];
 
     for (const chat of chats) {
-      const otroId = chat.participantes.find((p) => {
-        return String(p) !== String(idUsuario);
-      });
-
+      const otroId = obtenerOtroIdDesdeChat(chat, idUsuario);
       if (!otroId) {
         continue;
       }
 
-      const tieneMatch = await MatchUsuario.findOne({
-        id_usuario:      idUsuario,
-        id_destinatario: otroId,
-      });
-
-      if (!tieneMatch) {
+      const esMutuo = await verificarMatchMutuo(idUsuario, otroId);
+      if (!esMutuo) {
         continue;
       }
 
@@ -124,6 +129,7 @@ const listarChats = async (req, res) => {
         foto:             otroUsuario.foto_perfil,
         fecha_nacimiento: otroUsuario.fecha_nacimiento,
         id_usuario:       otroUsuario._id,
+        es_mutuo:         true,
         ultimoMensaje: {
           texto:     extractoUltimo,
           hora:      horaUltimo,
@@ -139,7 +145,7 @@ const listarChats = async (req, res) => {
   }
 };
 
-// GET /api/chats/:id — Detalle del chat + contacto
+// GET /api/chats/:id — Detalle del chat + contacto + estado mutuo
 const obtenerChat = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
   const chatId = req.params.id;
@@ -163,10 +169,14 @@ const obtenerChat = async (req, res) => {
     }
 
     const contacto = obtenerOtroParticipante(chat, idUsuario);
+    const otroId = contacto?._id || contacto?.id;
+    const esMutuo = otroId ? await verificarMatchMutuo(idUsuario, otroId) : false;
 
     return res.status(200).json({
-      id_chat: chat._id,
+      id_chat:         chat._id,
       contacto,
+      es_mutuo:        esMutuo,
+      chat_habilitado: esMutuo,
     });
   } catch (error) {
     console.error('Error al obtener chat:', error);
@@ -191,6 +201,16 @@ const obtenerMensajes = async (req, res) => {
 
     if (!usuarioEsParticipante(chat, idUsuario)) {
       return res.status(403).json({ mensaje: 'No tienes acceso a este chat.' });
+    }
+
+    const otroId = obtenerOtroIdDesdeChat(chat, idUsuario);
+    const esMutuo = otroId ? await verificarMatchMutuo(idUsuario, otroId) : false;
+
+    if (!esMutuo) {
+      return res.status(403).json({
+        mensaje: 'Chat inhabilitado. Esperando a que el otro usuario acepte la solicitud.',
+        chat_habilitado: false,
+      });
     }
 
     const mensajes = await Mensaje.find({ id_chat: chatId })
@@ -220,14 +240,21 @@ const obtenerMensajes = async (req, res) => {
   }
 };
 
-// POST /api/chats/:id/mensajes
+// POST /api/chats/:id/mensajes — Solo con match mutuo
 const enviarMensaje = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
   const chatId = req.params.id;
   const { texto } = req.body;
+  const textoSanitizado = sanitizarTexto(texto);
 
-  if (!texto || !String(texto).trim()) {
+  if (!textoSanitizado) {
     return res.status(400).json({ mensaje: 'El mensaje no puede estar vacío.' });
+  }
+
+  if (String(texto).trim().length > MAX_MENSAJE_LENGTH) {
+    return res.status(400).json({
+      mensaje: `El mensaje no puede superar ${MAX_MENSAJE_LENGTH} caracteres.`,
+    });
   }
 
   if (!mongoose.Types.ObjectId.isValid(chatId)) {
@@ -244,10 +271,20 @@ const enviarMensaje = async (req, res) => {
       return res.status(403).json({ mensaje: 'No tienes acceso a este chat.' });
     }
 
+    const otroId = obtenerOtroIdDesdeChat(chat, idUsuario);
+    const esMutuo = otroId ? await verificarMatchMutuo(idUsuario, otroId) : false;
+
+    if (!esMutuo) {
+      return res.status(403).json({
+        mensaje: 'Chat inhabilitado. Esperando a que el otro usuario acepte la solicitud.',
+        chat_habilitado: false,
+      });
+    }
+
     const mensaje = await Mensaje.create({
       id_chat:      chatId,
       id_remitente: idUsuario,
-      texto:        String(texto).trim(),
+      texto:        textoSanitizado,
       tipo:         'texto',
     });
 
@@ -262,6 +299,16 @@ const enviarMensaje = async (req, res) => {
       createdAt: mensaje.createdAt,
     };
 
+    const payloadReceptor = {
+      ...formateado,
+      remitente: 'otro',
+    };
+
+    const io = getIO();
+    if (io) {
+      io.to(String(chatId)).emit('nuevoMensaje', payloadReceptor);
+    }
+
     return res.status(201).json(formateado);
   } catch (error) {
     console.error('Error al enviar mensaje:', error);
@@ -269,7 +316,7 @@ const enviarMensaje = async (req, res) => {
   }
 };
 
-// GET /api/chats/con-usuario/:otroUsuarioId
+// GET /api/chats/con-usuario/:otroUsuarioId — Solo si hay match mutuo
 const obtenerChatConUsuario = async (req, res) => {
   const idUsuario = obtenerIdDesdeToken(req);
   const otroId = req.params.otroUsuarioId;
@@ -279,25 +326,42 @@ const obtenerChatConUsuario = async (req, res) => {
   }
 
   try {
-    const match = await MatchUsuario.findOne({
-      id_usuario:      idUsuario,
-      id_destinatario: otroId,
-    });
+    const esMutuo = await verificarMatchMutuo(idUsuario, otroId);
 
-    if (!match) {
+    if (!esMutuo) {
+      const yoLoAcepte = await MatchUsuario.findOne({
+        id_usuario:      idUsuario,
+        id_destinatario: otroId,
+      });
+      const ellosMeAceptaron = await MatchUsuario.findOne({
+        id_usuario:      otroId,
+        id_destinatario: idUsuario,
+      });
+
+      let mensaje = 'Debes tener un match mutuo para chatear.';
+      if (yoLoAcepte && !ellosMeAceptaron) {
+        mensaje = 'Esperando a que el otro usuario acepte tu solicitud.';
+      } else if (ellosMeAceptaron && !yoLoAcepte) {
+        mensaje = 'Este usuario te envió una solicitud. Respóndela desde tus notificaciones.';
+      }
+
       return res.status(403).json({
-        mensaje: 'Debes aceptar a este usuario desde el Dashboard para chatear.',
+        mensaje,
+        chat_habilitado: false,
+        es_mutuo: false,
       });
     }
 
-    const chat = await buscarOCrearChat(idUsuario, otroId);
+    const chat = await crearChatMutuo(idUsuario, otroId);
     const contacto = await Usuario.findById(otroId)
       .select('nombre_completo foto_perfil fecha_nacimiento')
       .lean();
 
     return res.status(200).json({
-      id_chat: chat._id,
+      id_chat:         chat._id,
       contacto,
+      es_mutuo:        true,
+      chat_habilitado: true,
     });
   } catch (error) {
     console.error('Error al obtener chat con usuario:', error);
@@ -305,7 +369,6 @@ const obtenerChatConUsuario = async (req, res) => {
   }
 };
 
-// GET /api/chats/archivados — stub vacío
 const listarArchivados = async (req, res) => {
   return res.status(200).json([]);
 };

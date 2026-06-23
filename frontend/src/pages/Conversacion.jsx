@@ -1,8 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { io } from 'socket.io-client';
 import { apiClient } from '../services/apiClient';
-import { API_BASE, SOCKET_URL } from '../config/env.js';
+import { API_BASE } from '../config/env.js';
+import {
+  subscribeSocketEvent,
+  joinChatRoom,
+  onSocketReconnect,
+} from '../services/socketService.js';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {
@@ -44,13 +48,33 @@ const Conversacion = () => {
 
   const fileInputRef = useRef(null);
   const mensajesEndRef = useRef(null);
-  const socketRef = useRef(null);
+
+  const recargarMensajes = useCallback(async () => {
+    if (!id) {
+      return;
+    }
+    try {
+      const data = await apiClient.get(`/chats/${id}/mensajes`);
+      let lista = [];
+      if (Array.isArray(data)) {
+        lista = data;
+      } else if (Array.isArray(data?.data)) {
+        lista = data.data;
+      }
+      setMensajes(lista);
+    } catch (error) {
+      if (error?.message?.includes('inhabilitado') || error?.message?.includes('acepte')) {
+        setChatHabilitado(false);
+      }
+    }
+  }, [id]);
 
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [errorEnvio, setErrorEnvio] = useState('');
   const [cargandoChat, setCargandoChat] = useState(true);
   const [errorChat, setErrorChat] = useState('');
+  const [chatHabilitado, setChatHabilitado] = useState(true);
 
   const [contacto, setContacto] = useState({
     id: null,
@@ -67,9 +91,13 @@ const Conversacion = () => {
       }
       setCargandoChat(true);
       setErrorChat('');
+      setChatHabilitado(true);
       try {
         const dataChat = await apiClient.get(`/chats/${id}`);
         const persona = dataChat?.contacto || dataChat?.data?.contacto;
+        const habilitado = dataChat?.chat_habilitado === true || dataChat?.es_mutuo === true;
+        setChatHabilitado(habilitado);
+
         if (persona) {
           const nombrePersona = persona.nombre_completo || persona.nombre || 'Estudiante';
           setContacto({
@@ -82,6 +110,7 @@ const Conversacion = () => {
         }
       } catch {
         setErrorChat('No se pudo cargar la conversación.');
+        setChatHabilitado(false);
       } finally {
         setCargandoChat(false);
       }
@@ -92,42 +121,29 @@ const Conversacion = () => {
         return;
       }
       try {
-        const data = await apiClient.get(`/chats/${id}/mensajes`);
-        let lista = [];
-        if (Array.isArray(data)) {
-          lista = data;
-        } else if (Array.isArray(data?.data)) {
-          lista = data.data;
-        }
-        setMensajes(lista);
-      } catch {
+        await recargarMensajes();
+      } catch (error) {
         setMensajes([]);
+        if (error?.message?.includes('inhabilitado') || error?.message?.includes('acepte')) {
+          setChatHabilitado(false);
+        }
       }
     };
 
     cargarChat();
     cargarMensajes();
-  }, [id]);
+  }, [id, recargarMensajes]);
 
   useEffect(() => {
-    if (!id) {
+    if (!id || !chatHabilitado) {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    socketRef.current = io(SOCKET_URL, {
-      auth: {
-        token: token,
-      },
-      withCredentials: true,
-    });
-    socketRef.current.emit('joinChat', id);
+    joinChatRoom(id);
 
-    socketRef.current.on('nuevoMensaje', (mensajeRecibido) => {
+    const desuscribirMensaje = subscribeSocketEvent('nuevoMensaje', (mensajeRecibido) => {
       setMensajes((prev) => {
-        const yaExiste = prev.some((m) => {
-          return String(m.id) === String(mensajeRecibido.id);
-        });
+        const yaExiste = prev.some((m) => String(m.id) === String(mensajeRecibido.id));
         if (yaExiste) {
           return prev;
         }
@@ -135,14 +151,24 @@ const Conversacion = () => {
       });
     });
 
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('nuevoMensaje');
-        socketRef.current.disconnect();
-        socketRef.current = null;
+    const desuscribirError = subscribeSocketEvent('error_chat', (payload) => {
+      if (payload?.mensaje) {
+        setErrorChat(payload.mensaje);
+        setChatHabilitado(false);
       }
+    });
+
+    const desuscribirReconnect = onSocketReconnect(() => {
+      joinChatRoom(id);
+      recargarMensajes();
+    });
+
+    return () => {
+      desuscribirMensaje();
+      desuscribirError();
+      desuscribirReconnect();
     };
-  }, [id]);
+  }, [id, chatHabilitado, recargarMensajes]);
 
   useEffect(() => {
     if (mensajesEndRef.current) {
@@ -152,7 +178,7 @@ const Conversacion = () => {
 
   const enviarMensaje = async (e) => {
     e.preventDefault();
-    if (!nuevoMensaje.trim()) {
+    if (!nuevoMensaje.trim() || !chatHabilitado) {
       return;
     }
 
@@ -163,15 +189,13 @@ const Conversacion = () => {
       });
 
       if (nuevo) {
-        setMensajes((msgs) => {
-          return [...msgs, nuevo];
-        });
+        setMensajes((msgs) => [...msgs, nuevo]);
         setNuevoMensaje('');
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('enviarMensaje', { chatId: id, mensaje: nuevo });
-        }
       }
-    } catch {
+    } catch (error) {
+      if (error?.message?.includes('inhabilitado') || error?.message?.includes('acepte')) {
+        setChatHabilitado(false);
+      }
       setErrorEnvio('No se pudo enviar el mensaje. Intenta de nuevo.');
     }
   };
@@ -245,6 +269,24 @@ const Conversacion = () => {
       )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
+        {!chatHabilitado && (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4 border border-amber-100">
+              <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <p className="text-sm font-bold text-gray-800 mb-1">
+              Chat inhabilitado
+            </p>
+            <p className="text-xs text-gray-500 max-w-xs">
+              Esperando a que el otro usuario acepte la solicitud. Revisa tus notificaciones en el Dashboard.
+            </p>
+          </div>
+        )}
+
+        {chatHabilitado && (
+        <>
         <div className="flex justify-center mb-6">
           <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-4 py-2 rounded-xl text-center shadow-sm max-w-[85%] border border-yellow-200">
             🔒 Nunca compartas contraseñas ni realices pagos por adelantado sin visitar la vivienda previamente.
@@ -296,10 +338,13 @@ const Conversacion = () => {
           );
         })}
         <div ref={mensajesEndRef} />
+        </>
+        )}
       </div>
 
       <input type="file" accept="image/*, .pdf, .doc" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
 
+      {chatHabilitado && (
       <div className="absolute bottom-0 w-full bg-white border-t border-gray-100 p-4 pb-safe z-20 shadow-[0_-4px_20px_-15px_rgba(0,0,0,0.1)]">
         {errorEnvio && (
           <div className="mb-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-2">
@@ -354,6 +399,7 @@ const Conversacion = () => {
           </button>
         </form>
       </div>
+      )}
     </div>
   );
 };

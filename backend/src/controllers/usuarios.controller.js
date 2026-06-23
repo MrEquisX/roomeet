@@ -3,9 +3,10 @@ const bcrypt = require('bcrypt');
 const Usuario = require('../models/Usuario');
 const Alojamiento = require('../models/Alojamiento');
 const {
-  filtrarPorUmbralConContingencia,
-  consultarCandidatosEmparejamiento,
-  obtenerFallbackEmergencia,
+    filtrarPorUmbralConContingencia,
+    consultarCandidatosEmparejamiento,
+    obtenerFallbackEmergencia,
+    obtenerIdsExcluidosDelSwipe,
 } = require('./matches.controller');
 
 const obtenerIdDesdeToken = (req) => {
@@ -707,11 +708,15 @@ const obtenerMatches = async (req, res) => {
 
         // ── 3. Consultar candidatos ───────────────────────────────────────────
         const miObjectId = new mongoose.Types.ObjectId(String(miId));
+        const idsExcluidos = await obtenerIdsExcluidosDelSwipe(miId);
         const candidatos = await consultarCandidatosEmparejamiento(yo, miObjectId);
+        const candidatosFiltrados = candidatos.filter((candidato) => {
+            return !idsExcluidos.has(String(candidato._id));
+        });
 
         // ── 4. Cargar viviendas publicadas para calcular distancia en el frontend ──
         const idsAlojamientos = [];
-        for (const candidato of candidatos) {
+        for (const candidato of candidatosFiltrados) {
             if (candidato.alojamientoId) {
                 idsAlojamientos.push(candidato.alojamientoId);
             }
@@ -731,7 +736,7 @@ const obtenerMatches = async (req, res) => {
         // ── 5. Calcular matchScore para cada candidato en memoria ──────────────
         const resultados = [];
 
-        for (const candidato of candidatos) {
+        for (const candidato of candidatosFiltrados) {
             const idCandidato = String(candidato._id);
 
             if (idCandidato === String(miId)) {
@@ -779,7 +784,7 @@ const obtenerMatches = async (req, res) => {
         let resultadosFinales = filtrarPorUmbralConContingencia(resultados);
 
         if (resultadosFinales.length === 0) {
-            resultadosFinales = await obtenerFallbackEmergencia(miObjectId);
+            resultadosFinales = await obtenerFallbackEmergencia(miObjectId, idsExcluidos);
 
             const idsAlojamientosRescate = [];
             for (const entradaRescate of resultadosFinales) {

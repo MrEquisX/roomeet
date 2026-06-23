@@ -1,52 +1,69 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL } from '../config/env.js';
+import Toast from '../components/Toast.jsx';
 
 const RecuperarPassword = () => {
   const [email, setEmail] = useState('');
-  const [feedback, setFeedback] = useState({ sent: false, error: null, loading: false });
+  const [loading, setLoading] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const cerrarToast = useCallback(() => setToast(null), []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFeedback({ sent: false, error: null, loading: true });
+    if (loading) {
+      return;
+    }
+
+    setLoading(true);
+    setToast(null);
 
     try {
       const response = await fetch(`${API_URL}/auth/recuperar-password`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json"
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
 
-      // Independiente de si el email existe o no, mostramos el mensaje de éxito si el backend responde 200
+      const data = await response.json().catch(() => ({}));
+
       if (response.ok) {
-        setFeedback({
-          sent: true,
-          error: null,
-          loading: false
+        setEnviado(true);
+        setEmail('');
+        setToast({
+          type: 'success',
+          message: data.msg || 'Si el correo existe, recibirás un enlace en breve.',
         });
-        setEmail(''); // limpiamos el campo
       } else {
-        // Si el servidor responde con error (ej: 400, 500), mostramos un mensaje de error amigable
-        const data = await response.json().catch(() => ({}));
-        setFeedback({
-          sent: false,
-          error: data?.msg || 'Ocurrió un error al solicitar el reseteo. Intenta nuevamente.',
-          loading: false
+        setToast({
+          type: 'error',
+          message: data.msg || 'Ocurrió un error al solicitar el reseteo. Intenta nuevamente.',
         });
       }
-    } catch (err) {
-      setFeedback({
-        sent: false,
-        error: "No se pudo conectar al servidor. Intenta más tarde.",
-        loading: false
+    } catch {
+      setToast({
+        type: 'error',
+        message: 'No se pudo conectar al servidor. Intenta más tarde.',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-6 font-sans">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={cerrarToast}
+        />
+      )}
+
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 flex flex-col items-center">
         <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
           <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,41 +72,37 @@ const RecuperarPassword = () => {
         </div>
 
         <h1 className="text-2xl font-bold text-blue-900 mb-2 text-center">Recuperar Contraseña</h1>
-        
-        {!feedback.sent ? (
+
+        {!enviado ? (
           <>
             <p className="text-sm text-gray-500 text-center mb-6">
               Ingresa tu correo institucional y te enviaremos las instrucciones para restablecer tu contraseña.
             </p>
-            {feedback.error && (
-              <div className="bg-red-50 text-red-700 p-3 mb-4 rounded-2xl border border-red-200 w-full text-center text-sm">
-                {feedback.error}
-              </div>
-            )}
+
             <form onSubmit={handleSubmit} className="w-full space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2 ml-1">
                   Correo Institucional
                 </label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   placeholder="estudiante@pucv.cl"
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  disabled={feedback.loading}
+                  disabled={loading}
                 />
               </div>
 
-              <button 
-                type="submit" 
-                disabled={feedback.loading}
+              <button
+                type="submit"
+                disabled={loading}
                 className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all mt-2 ${
-                  feedback.loading ? 'opacity-60 cursor-not-allowed' : ''
+                  loading ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
               >
-                {feedback.loading ? "Enviando..." : "Enviar correo de recuperación"}
+                {loading ? 'Enviando...' : 'Enviar correo de recuperación'}
               </button>
             </form>
           </>
@@ -101,6 +114,16 @@ const RecuperarPassword = () => {
               </p>
               <p className="text-xs mt-1">Revisa tu bandeja de entrada o la carpeta de spam.</p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEnviado(false);
+                setToast(null);
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Enviar a otro correo
+            </button>
           </div>
         )}
 

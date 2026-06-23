@@ -1,65 +1,79 @@
 import { API_URL } from '../config/env.js';
 
+const REQUEST_TIMEOUT_MS = 30000;
+
+export class ApiError extends Error {
+  constructor(mensaje, { status = 0, esRed = false } = {}) {
+    super(mensaje);
+    this.name = 'ApiError';
+    this.status = status;
+    this.esRed = esRed;
+  }
+}
+
 export const apiClient = {
   async request(endpoint, options = {}) {
     const token = localStorage.getItem('token');
-
-    // Determinar si el body es FormData
     const isFormData = options.body instanceof FormData;
 
-    // Configurar headers por defecto dependiendo del tipo de body
-    const headers = {
-      ...options.headers,
-    };
+    const headers = { ...options.headers };
     if (!isFormData) {
       headers['Content-Type'] = 'application/json';
     }
-    // Inyectar el token automáticamente si existe
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Si es FormData, no hay que pasar 'Content-Type' (el navegador lo agrega)
     const config = {
       ...options,
       headers,
       credentials: 'include',
     };
     if (isFormData) {
-      // Eliminar 'Content-Type' si está, para que el navegador lo maneje correctamente
       delete config.headers['Content-Type'];
     }
 
-    try {
-      const response = await fetch(`${API_URL}${endpoint}`, config);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      // Si la sesión expiró (401), limpiar y redirigir
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        ...config,
+        signal: controller.signal,
+      });
+
       if (response.status === 401) {
         localStorage.removeItem('token');
         window.location.hash = '#/login';
-        return null;
+        throw new ApiError('Sesión expirada. Inicia sesión de nuevo.', { status: 401 });
       }
 
-      // Manejar errores de servidor (500 o similares)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const mensajeError = errorData.mensaje || errorData.message || 'Error en la petición';
-        throw new Error(mensajeError);
+        const mensajeError = errorData.mensaje || errorData.msg || errorData.message || 'Error en la petición';
+        throw new ApiError(mensajeError, { status: response.status });
       }
 
-      // Devolver JSON si la respuesta tiene contenido
       if (response.status !== 204) {
         return await response.json();
       }
-      
+
       return true;
     } catch (error) {
-      console.error(`[apiClient Error] en ${endpoint}:`, error.message);
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      if (error.name === 'AbortError') {
+        throw new ApiError('La solicitud tardó demasiado. Revisa tu conexión e intenta de nuevo.', { esRed: true });
+      }
+
+      throw new ApiError('Sin conexión al servidor. Verifica tu internet e intenta de nuevo.', { esRed: true });
+    } finally {
+      clearTimeout(timeoutId);
     }
   },
 
-  // Métodos de ayuda rápidos
   get(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'GET' });
   },
@@ -69,7 +83,7 @@ export const apiClient = {
     return this.request(endpoint, {
       ...options,
       method: 'POST',
-      body: isFormData ? body : JSON.stringify(body)
+      body: isFormData ? body : JSON.stringify(body),
     });
   },
 
@@ -78,11 +92,11 @@ export const apiClient = {
     return this.request(endpoint, {
       ...options,
       method: 'PUT',
-      body: isFormData ? body : JSON.stringify(body)
+      body: isFormData ? body : JSON.stringify(body),
     });
   },
 
   delete(endpoint, options = {}) {
     return this.request(endpoint, { ...options, method: 'DELETE' });
-  }
+  },
 };
