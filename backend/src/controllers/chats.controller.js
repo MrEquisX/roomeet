@@ -131,9 +131,12 @@ const listarChats = async (req, res) => {
         id_usuario:       otroUsuario._id,
         es_mutuo:         true,
         ultimoMensaje: {
-          texto:     extractoUltimo,
-          hora:      horaUltimo,
-          createdAt: ultimoMensaje ? ultimoMensaje.createdAt : null,
+          texto:      extractoUltimo,
+          hora:       horaUltimo,
+          createdAt:  ultimoMensaje ? ultimoMensaje.createdAt : null,
+          es_de_otro: ultimoMensaje
+            ? String(ultimoMensaje.id_remitente) !== String(idUsuario)
+            : false,
         },
       });
     }
@@ -307,6 +310,10 @@ const enviarMensaje = async (req, res) => {
     const io = getIO();
     if (io) {
       io.to(String(chatId)).emit('nuevoMensaje', payloadReceptor);
+      io.to(`user:${String(otroId)}`).emit('mensaje_no_leido', {
+        id_chat:   String(chatId),
+        createdAt: mensaje.createdAt,
+      });
     }
 
     return res.status(201).json(formateado);

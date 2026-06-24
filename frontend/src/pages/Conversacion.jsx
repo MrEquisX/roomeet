@@ -7,6 +7,7 @@ import {
   joinChatRoom,
   onSocketReconnect,
 } from '../services/socketService.js';
+import { markChatAsRead } from '../services/unreadChatsService.js';
 
 const getImageUrl = (ruta) => {
   if (!ruta) {
@@ -175,6 +176,13 @@ const Conversacion = () => {
       mensajesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [mensajes]);
+
+  useEffect(() => {
+    if (!id || !chatHabilitado || cargandoChat) {
+      return;
+    }
+    markChatAsRead(id);
+  }, [id, chatHabilitado, cargandoChat, mensajes]);
 
   const enviarMensaje = async (e) => {
     e.preventDefault();
