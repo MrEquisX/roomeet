@@ -28,6 +28,57 @@ function buildFrontendUrl(pathWithQuery) {
     return `${base}/#/${path}`;
 }
 
+function formatSmtpError(error) {
+    if (!error) {
+        return { message: 'Error desconocido' };
+    }
+
+    const detalle = {
+        message:      error.message,
+        name:         error.name,
+        code:         error.code,
+        command:      error.command,
+        response:     error.response,
+        responseCode: error.responseCode,
+        errno:        error.errno,
+        syscall:      error.syscall,
+        address:      error.address,
+        port:         error.port,
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+        detalle.stack = error.stack;
+    }
+
+    return detalle;
+}
+
+function logSmtpAudit(contexto) {
+    const cfg = getSmtpConfig();
+
+    console.log(`[mailer][audit] ${contexto}`, {
+        host:             cfg.host,
+        port:             cfg.port,
+        userResuelto:     cfg.user ? 'Existe' : 'Falta',
+        passResuelto:     cfg.pass ? 'Existe' : 'Falta',
+        SMTP_HOST:        process.env.SMTP_HOST || '(vacío, usa default)',
+        EMAIL_HOST:       process.env.EMAIL_HOST ? 'Existe' : 'Falta',
+        SMTP_PORT:        process.env.SMTP_PORT || process.env.EMAIL_PORT || '(default 587)',
+        SMTP_USER:        process.env.SMTP_USER ? 'Existe' : 'Falta',
+        EMAIL_USER:       process.env.EMAIL_USER ? 'Existe' : 'Falta',
+        SMTP_PASS:        process.env.SMTP_PASS ? 'Existe' : 'Falta',
+        EMAIL_PASSWORD:   process.env.EMAIL_PASSWORD ? 'Existe' : 'Falta',
+        FRONTEND_URL:     process.env.FRONTEND_URL ? 'Existe' : 'Falta',
+        NODE_ENV:         process.env.NODE_ENV || 'undefined',
+        timeoutMs:        SMTP_SEND_TIMEOUT_MS,
+    });
+}
+
+function logSmtpError(contexto, error) {
+    console.error(`[mailer] ${contexto} — detalle JSON:`, JSON.stringify(formatSmtpError(error), null, 2));
+    console.error(`[mailer] ${contexto} — objeto Error completo:`, error);
+}
+
 function withTimeout(promise, ms, mensaje) {
     let timerId;
 
@@ -46,7 +97,7 @@ function createTransporter() {
     const { host, port, user, pass } = getSmtpConfig();
 
     if (!user || !pass) {
-        throw new Error('SMTP no configurado: faltan credenciales de correo.');
+        throw new Error('SMTP no configurado: faltan credenciales de correo (SMTP_USER/EMAIL_USER y SMTP_PASS/EMAIL_PASSWORD).');
     }
 
     return nodemailer.createTransport({
@@ -64,16 +115,76 @@ function createTransporter() {
     });
 }
 
+async function verifySmtpConnection() {
+    logSmtpAudit('verifySmtpConnection');
+
+    if (!isSmtpConfigured()) {
+        const error = new Error('SMTP no configurado: faltan credenciales.');
+        logSmtpError('verifySmtpConnection', error);
+        return {
+            ok:    false,
+            fase:  'config',
+            error: formatSmtpError(error),
+        };
+    }
+
+    let transporte;
+
+    try {
+        transporte = createTransporter();
+    } catch (error) {
+        logSmtpError('verifySmtpConnection — createTransporter', error);
+        return {
+            ok:    false,
+            fase:  'config',
+            error: formatSmtpError(error),
+        };
+    }
+
+    try {
+        await withTimeout(
+            transporte.verify(),
+            SMTP_SEND_TIMEOUT_MS,
+            `Timeout en transporter.verify() (${SMTP_SEND_TIMEOUT_MS}ms). Posible puerto bloqueado o host inaccesible desde Render.`
+        );
+
+        return {
+            ok:      true,
+            fase:    'verify',
+            mensaje: 'Conexión SMTP verificada correctamente con Google.',
+        };
+    } catch (error) {
+        logSmtpError('verifySmtpConnection — transporter.verify()', error);
+        return {
+            ok:    false,
+            fase:  'verify',
+            error: formatSmtpError(error),
+        };
+    } finally {
+        try {
+            transporte.close();
+        } catch {
+            // Ignorar errores al cerrar el transporte
+        }
+    }
+}
+
 async function sendPasswordResetEmail({ to, nombre, tokenPlano }) {
+    logSmtpAudit('sendPasswordResetEmail — pre-envío');
+
     const { user } = getSmtpConfig();
     const enlace = buildFrontendUrl(`nueva-password?token=${tokenPlano}`);
 
     let transporte;
+
     try {
         transporte = createTransporter();
     } catch (configError) {
-        throw new Error(configError.message || 'SMTP no configurado.');
+        logSmtpError('sendPasswordResetEmail — createTransporter', configError);
+        throw configError;
     }
+
+    console.log('[mailer] sendPasswordResetEmail — intentando enviar a:', to);
 
     const envio = transporte.sendMail({
         from:    `"Roomeet" <${user}>`,
@@ -97,15 +208,18 @@ async function sendPasswordResetEmail({ to, nombre, tokenPlano }) {
     });
 
     try {
-        await withTimeout(
+        const info = await withTimeout(
             envio,
             SMTP_SEND_TIMEOUT_MS,
             `Timeout SMTP (${SMTP_SEND_TIMEOUT_MS}ms). Verifica SMTP_HOST, SMTP_USER y SMTP_PASS en Render.`
         );
+
+        console.log('[mailer] sendPasswordResetEmail — enviado OK. messageId:', info?.messageId || '(sin id)');
+
+        return info;
     } catch (error) {
-        const mensaje = error?.message || 'Error desconocido al enviar correo.';
-        console.error('[mailer] sendPasswordResetEmail:', mensaje);
-        throw new Error(mensaje);
+        logSmtpError('sendPasswordResetEmail — sendMail', error);
+        throw error;
     } finally {
         try {
             transporte.close();
@@ -122,4 +236,8 @@ module.exports = {
     buildFrontendUrl,
     createTransporter,
     sendPasswordResetEmail,
+    verifySmtpConnection,
+    formatSmtpError,
+    logSmtpAudit,
+    logSmtpError,
 };

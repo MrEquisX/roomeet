@@ -6,6 +6,11 @@ const {
     isSmtpConfigured,
     buildFrontendUrl,
     sendPasswordResetEmail,
+    verifySmtpConnection,
+    formatSmtpError,
+    logSmtpAudit,
+    logSmtpError,
+    getSmtpConfig,
 } = require('../utils/mailer');
 
 // ─── REGISTRO ─────────────────────────────────────────────────────────────────
@@ -213,13 +218,14 @@ const olvideMiPassword = async (req, res) => {
         await usuario.save({ validateBeforeSave: false });
 
         try {
+            logSmtpAudit('olvideMiPassword — antes de sendPasswordResetEmail');
             await sendPasswordResetEmail({
                 to:         usuario.email,
                 nombre:     usuario.nombre_completo,
                 tokenPlano,
             });
         } catch (mailError) {
-            console.error('[olvideMiPassword] Error al enviar correo:', mailError.message);
+            logSmtpError('olvideMiPassword — sendPasswordResetEmail', mailError);
 
             usuario.resetPasswordToken   = undefined;
             usuario.resetPasswordExpires = undefined;
@@ -231,14 +237,59 @@ const olvideMiPassword = async (req, res) => {
 
             return res.status(503).json({
                 msg: 'No pudimos enviar el correo de recuperación. Verifica la configuración SMTP o intenta más tarde.',
+                ...(process.env.NODE_ENV !== 'production' && {
+                    detalle: formatSmtpError(mailError),
+                }),
             });
         }
 
         return res.status(200).json({ msg: mensajeExito });
 
     } catch (error) {
-        console.error('[olvideMiPassword] Error:', error.message);
+        logSmtpError('olvideMiPassword — error general', error);
         return res.status(500).json({ msg: 'Error interno. Intenta más tarde.' });
+    }
+};
+
+// ─── DIAGNÓSTICO SMTP (solo para depuración) ─────────────────────────────────
+// GET /api/auth/test-smtp?secret=TU_SMTP_TEST_SECRET
+const testSmtp = async (req, res) => {
+    const secretoEnv = process.env.SMTP_TEST_SECRET;
+    const secretoReq = req.query.secret || req.headers['x-smtp-test-secret'];
+
+    if (process.env.NODE_ENV === 'production') {
+        if (!secretoEnv || secretoReq !== secretoEnv) {
+            return res.status(403).json({
+                ok:  false,
+                msg: 'Forbidden. En producción debes pasar ?secret=SMTP_TEST_SECRET configurado en Render.',
+            });
+        }
+    }
+
+    try {
+        const cfg = getSmtpConfig();
+        const resultado = await verifySmtpConnection();
+
+        return res.status(resultado.ok ? 200 : 503).json({
+            ok:     resultado.ok,
+            fase:   resultado.fase,
+            mensaje: resultado.mensaje || null,
+            error:  resultado.error || null,
+            config: {
+                host:           cfg.host,
+                port:           cfg.port,
+                userConfigured: Boolean(cfg.user),
+                passConfigured: Boolean(cfg.pass),
+                isSmtpConfigured: isSmtpConfigured(),
+            },
+        });
+    } catch (error) {
+        logSmtpError('testSmtp — error inesperado', error);
+        return res.status(500).json({
+            ok:    false,
+            msg:   'Error inesperado al probar SMTP.',
+            error: formatSmtpError(error),
+        });
     }
 };
 
@@ -284,5 +335,6 @@ module.exports = {
     verificarEmail,
     loginUsuario,
     olvideMiPassword,
+    testSmtp,
     resetPassword,
 };
