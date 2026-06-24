@@ -3,31 +3,13 @@ import { useEffect, useState, createRef, useMemo, useRef, useCallback } from 're
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
 import { calcularAfinidad, normalizarInteresParaVista } from '../utils/perfilHelpers';
-import { API_BASE } from '../config/env.js';
+import { getImageUrl, getInicialesAvatar } from '../utils/mediaUrl.js';
 import NotificationBell from '../components/NotificationBell.jsx';
 import BottomNav from '../components/BottomNav.jsx';
+import Avatar from '../components/Avatar.jsx';
 import Toast from '../components/Toast.jsx';
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
-
-const getImageUrl = (ruta) => {
-  if (!ruta) {
-    return null;
-  }
-  if (ruta.startsWith('http')) {
-    return ruta;
-  }
-  return `${API_BASE}${ruta}`;
-};
-
-const getIniciales = (nombre) => {
-  if (!nombre) {
-    return '?';
-  }
-  const partes    = nombre.split(' ');
-  const iniciales = partes.map((n) => n[0]);
-  return iniciales.join('').toUpperCase().slice(0, 2);
-};
 
 const calcularEdad = (fecha) => {
   if (!fecha) {
@@ -359,6 +341,7 @@ const EstudianteCard = (props) => {
   const miUbicacion     = props.miUbicacion;
   const zIndex          = props.zIndex;
   const usuarioLogueado = props.usuarioLogueado;
+  const [fotoFallida, setFotoFallida] = useState(false);
 
   // ── Badge de compatibilidad (termómetro visual) ───────────────────────────
   let badgeColorClases = '';
@@ -395,6 +378,10 @@ const EstudianteCard = (props) => {
   const fotoUrl = getImageUrl(
     estudiante?.fotoPerfilUrl || estudiante?.foto_perfil || estudiante?.fotoPerfil
   );
+
+  useEffect(() => {
+    setFotoFallida(false);
+  }, [fotoUrl]);
   const userId      = estudiante?._id || estudiante?.id;
   const nombre      = estudiante?.nombre_completo || estudiante?.nombre || 'Estudiante';
   const objetoVivienda = estudiante?.vivienda || null;
@@ -507,17 +494,19 @@ const EstudianteCard = (props) => {
       <div className="absolute inset-0 bg-zinc-900 pointer-events-none z-0" />
 
       {/* ── FOTO DE FONDO ── */}
-      {fotoUrl ? (
+      {fotoUrl && !fotoFallida ? (
         <img
           src={fotoUrl}
           alt={nombre}
           className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[1]"
           draggable="false"
+          loading="lazy"
+          onError={() => setFotoFallida(true)}
         />
       ) : (
         <div className="absolute inset-0 w-full h-full bg-linear-to-br from-indigo-400 to-purple-600 flex items-center justify-center pointer-events-none z-[1]">
           <span className="text-white text-6xl font-bold select-none">
-            {getIniciales(nombre)}
+            {getInicialesAvatar(nombre)}
           </span>
         </div>
       )}
@@ -683,8 +672,6 @@ const EstudianteCard = (props) => {
 const Dashboard = (props) => {
   const [estudiantesAfines, setEstudiantesAfines] = useState([]);
   const [cargando, setCargando]           = useState(true);
-  const [avatarUrl, setAvatarUrl]         = useState(null);
-  const [avatarInicial, setAvatarInicial] = useState('');
   const [miUbicacion, setMiUbicacion]     = useState(null);
   const [miPerfil, setMiPerfil]             = useState(null);
   const [mazoCompletado, setMazoCompletado] = useState(false);
@@ -970,13 +957,6 @@ const Dashboard = (props) => {
 
         miIdRef.current = miIdLogueado;
 
-        if (respuestaPerfil && respuestaPerfil.fotoPerfilUrl) {
-          setAvatarUrl(getImageUrl(respuestaPerfil.fotoPerfilUrl));
-        } else {
-          const inicial = respuestaPerfil && respuestaPerfil.nombre ? respuestaPerfil.nombre[0].toUpperCase() : '?';
-          setAvatarInicial(inicial);
-        }
-
         if (respuestaPerfil && respuestaPerfil.ubicacion_sede) {
           const lat = respuestaPerfil.ubicacion_sede.latitud;
           const lng = respuestaPerfil.ubicacion_sede.longitud;
@@ -1048,13 +1028,13 @@ const Dashboard = (props) => {
               Buscador
             </button>
             <Link to="/perfil" className="w-10 h-10 rounded-full overflow-hidden shrink-0 shadow-inner border-2 border-gray-200">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-linear-to-tr from-gray-700 to-gray-900 flex items-center justify-center text-white font-bold text-sm">
-                  {avatarInicial}
-                </div>
-              )}
+              <Avatar
+                src={miPerfil?.fotoPerfilUrl}
+                nombre={miPerfil?.nombre || miPerfil?.nombre_completo}
+                className="w-full h-full"
+                imgClassName="object-cover"
+                fallbackClassName="text-sm"
+              />
             </Link>
           </div>
         </div>

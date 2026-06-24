@@ -1,20 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav.jsx';
+import Avatar from '../components/Avatar.jsx';
 import { normalizarInteresParaVista } from '../utils/perfilHelpers';
-import { API_BASE, API_URL } from '../config/env.js';
+import { getImageUrl } from '../utils/mediaUrl.js';
+import { API_URL } from '../config/env.js';
 import { disconnectSocket } from '../services/socketService';
 import CambiarContrasena from './CambiarContrasena';
-
-const getImageUrl = (ruta) => {
-  if (!ruta) {
-    return null;
-  }
-  if (ruta.startsWith('http')) {
-    return ruta;
-  }
-  return `${API_BASE}${ruta}`;
-};
 
 const calcularEdad = (fechaNacimiento) => {
   if (!fechaNacimiento) {
@@ -143,13 +135,13 @@ const Perfil = () => {
       <div className="bg-blue-600 h-32 rounded-b-[3rem] w-full relative shadow-sm">
         <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
           <div className="w-28 h-28 bg-white rounded-3xl shadow-lg p-1">
-            {usuario.fotoPerfilUrl ? (
-              <img src={getImageUrl(usuario.fotoPerfilUrl)} alt="foto de perfil" className="w-full h-full object-cover rounded-[1.25rem]" />
-            ) : (
-              <div className="w-full h-full bg-gray-800 rounded-[1.25rem] flex items-center justify-center text-white text-3xl font-bold select-none uppercase">
-                {nombre?.[0]}
-              </div>
-            )}
+            <Avatar
+              src={usuario.fotoPerfilUrl}
+              nombre={`${nombre || ''} ${apellido || ''}`.trim()}
+              className="w-full h-full rounded-[1.25rem]"
+              imgClassName="object-cover rounded-[1.25rem]"
+              fallbackClassName="rounded-[1.25rem] text-3xl"
+            />
           </div>
         </div>
       </div>

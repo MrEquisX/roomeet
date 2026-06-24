@@ -6,25 +6,8 @@ import {
   subscribeSocketEvent,
   onSocketReconnect,
 } from '../services/socketService';
-import { API_BASE } from '../config/env.js';
+import Avatar from './Avatar.jsx';
 import Toast from './Toast.jsx';
-
-const getImageUrl = (ruta) => {
-  if (!ruta) {
-    return null;
-  }
-  if (ruta.startsWith('http')) {
-    return ruta;
-  }
-  return `${API_BASE}${ruta}`;
-};
-
-const getIniciales = (nombre) => {
-  if (!nombre) {
-    return '?';
-  }
-  return nombre.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
-};
 
 function NotificationBell() {
   const [abierto, setAbierto] = useState(false);
@@ -225,20 +208,19 @@ function NotificationBell() {
               {!cargando && !errorCarga && notificaciones.map((item) => {
                 const usuario = item.from || {};
                 const usuarioId = usuario._id;
-                const fotoUrl = getImageUrl(usuario.foto_perfil);
                 const nombre = usuario.nombre_completo || 'Estudiante';
                 const estaProcesando = procesandoId === String(usuarioId);
 
                 return (
                   <div key={item.matchId || usuarioId} className="px-4 py-3 border-b border-gray-50 last:border-0">
                     <div className="flex items-center gap-3">
-                      {fotoUrl ? (
-                        <img src={fotoUrl} alt={nombre} className="w-10 h-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
-                          {getIniciales(nombre)}
-                        </div>
-                      )}
+                      <Avatar
+                        src={usuario.foto_perfil}
+                        nombre={nombre}
+                        className="w-10 h-10 rounded-full"
+                        imgClassName="object-cover rounded-full"
+                        fallbackClassName="rounded-full bg-blue-100 text-blue-700 text-xs"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-gray-900 truncate">{nombre}</p>
                         <p className="text-[11px] text-gray-500">Quiere conectar contigo</p>

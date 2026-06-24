@@ -8,6 +8,7 @@ const {
     obtenerFallbackEmergencia,
     obtenerIdsExcluidosDelSwipe,
 } = require('./matches.controller');
+const { normalizarRutaUpload } = require('../utils/mediaUrl');
 
 const obtenerIdDesdeToken = (req) => {
     if (req.usuario && req.usuario.id) {
@@ -195,7 +196,7 @@ const obtenerMiPerfil = async (req, res) => {
             identidad_genero: usuario.identidad_genero || '',
             telefono: usuario.telefono || '',
             bio: usuario.bio || '',
-            fotoPerfilUrl: usuario.foto_perfil || '',
+            fotoPerfilUrl: normalizarRutaUpload(usuario.foto_perfil),
             rol: usuario.rol,
             alojamientoId: usuario.alojamientoId || null,
             preferencias: {
@@ -894,7 +895,7 @@ const obtenerPerfilPublico = async (req, res) => {
             nombre,
             apellido,
             bio:           usuario.bio || '',
-            fotoPerfilUrl: usuario.foto_perfil || '',
+            fotoPerfilUrl: normalizarRutaUpload(usuario.foto_perfil),
             rol:           usuario.rol,
             universidad:   usuario.perfil_academico?.universidad || '',
             carrera:       usuario.perfil_academico?.carrera     || '',
