@@ -190,9 +190,9 @@ const olvideMiPassword = async (req, res) => {
     }
 
     if (!isSmtpConfigured()) {
-        console.error('[olvideMiPassword] SMTP no configurado (SMTP_USER / SMTP_PASS).');
+        console.error('[olvideMiPassword] SMTP no configurado. Variables requeridas: SMTP_USER + SMTP_PASS (o EMAIL_USER + EMAIL_PASSWORD).');
         return res.status(503).json({
-            msg: 'El servicio de correo no está disponible. Intenta más tarde.',
+            msg: 'El servicio de correo no está disponible. Contacta al administrador.',
         });
     }
 

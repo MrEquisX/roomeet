@@ -20,6 +20,9 @@ const RecuperarPassword = () => {
     setLoading(true);
     setToast(null);
 
+    const controlador = new AbortController();
+    const timeoutId = setTimeout(() => controlador.abort(), 25000);
+
     try {
       const response = await fetch(`${API_URL}/auth/recuperar-password`, {
         method: 'POST',
@@ -27,6 +30,7 @@ const RecuperarPassword = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        signal: controlador.signal,
       });
 
       const data = await response.json().catch(() => ({}));
@@ -44,12 +48,16 @@ const RecuperarPassword = () => {
           message: data.msg || 'Ocurrió un error al solicitar el reseteo. Intenta nuevamente.',
         });
       }
-    } catch {
+    } catch (error) {
+      const esTimeout = error?.name === 'AbortError';
       setToast({
         type: 'error',
-        message: 'No se pudo conectar al servidor. Intenta más tarde.',
+        message: esTimeout
+          ? 'El servidor tardó demasiado en responder. Revisa la configuración SMTP en Render e intenta de nuevo.'
+          : 'No se pudo conectar al servidor. Intenta más tarde.',
       });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

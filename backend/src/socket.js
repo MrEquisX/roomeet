@@ -12,7 +12,12 @@ const emitirAUsuario = (userId, evento, payload) => {
   if (!ioInstance || !userId) {
     return;
   }
-  ioInstance.to(salaUsuario(userId)).emit(evento, payload);
+
+  try {
+    ioInstance.to(salaUsuario(userId)).emit(evento, payload);
+  } catch (error) {
+    console.error(`[socket] Error al emitir "${evento}":`, error.message);
+  }
 };
 
 module.exports = {

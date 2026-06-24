@@ -13,6 +13,7 @@ import NuevaPassword from './pages/NuevaPassword';
 import AnadirVivienda from './pages/AnadirVivienda';
 import PerfilPublico from './pages/PerfilPublico';
 import DetalleVivienda from './pages/DetalleVivienda';
+import MatchToastListener from './components/MatchToastListener.jsx';
 
 // Componente ProtectedRoute que verifica el token y redirige si no existe
 function ProtectedRoute({ children }) {
@@ -27,6 +28,7 @@ function App() {
   return (
     <div className="min-h-screen bg-surface text-neutral-700 font-sans">
       <HashRouter>
+        <MatchToastListener />
         <Routes>
           {/* Rutas públicas */}
           <Route path="/" element={<Navigate to="/login" replace />} />

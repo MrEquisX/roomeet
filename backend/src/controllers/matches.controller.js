@@ -69,6 +69,26 @@ const formatearUsuarioNotificacion = (usuario) => ({
   fecha_nacimiento: usuario.fecha_nacimiento,
 });
 
+const primerNombre = (nombreCompleto) => {
+  if (!nombreCompleto || typeof nombreCompleto !== 'string') {
+    return 'Alguien';
+  }
+  const partes = nombreCompleto.trim().split(/\s+/);
+  return partes[0] || 'Alguien';
+};
+
+const emitirNotificacionMatch = (userId, payload) => {
+  if (!userId || !payload?.mensaje) {
+    return;
+  }
+
+  try {
+    emitirAUsuario(userId, 'notificacion_match', payload);
+  } catch (error) {
+    console.error('[emitirNotificacionMatch] Error:', error.message);
+  }
+};
+
 const emitirNotificacionPendiente = async (idDestinatario, match, idRemitente) => {
   const remitente = await Usuario.findById(idRemitente)
     .select('nombre_completo foto_perfil fecha_nacimiento')
@@ -78,11 +98,22 @@ const emitirNotificacionPendiente = async (idDestinatario, match, idRemitente) =
     return;
   }
 
-  emitirAUsuario(idDestinatario, 'nueva_notificacion', {
-    tipo:    'solicitud_match',
-    matchId: match._id,
-    from:    formatearUsuarioNotificacion(remitente),
+  const from = formatearUsuarioNotificacion(remitente);
+  const payloadBase = {
+    tipo:      'solicitud',
+    matchId:   match._id,
+    from,
     createdAt: match.createdAt || new Date(),
+  };
+
+  emitirAUsuario(idDestinatario, 'nueva_notificacion', {
+    ...payloadBase,
+    tipo: 'solicitud_match',
+  });
+
+  emitirNotificacionMatch(idDestinatario, {
+    ...payloadBase,
+    mensaje: `${primerNombre(from.nombre_completo)} te envió una solicitud de match.`,
   });
 };
 
@@ -93,20 +124,40 @@ const emitirMatchMutuo = async (idUsuario, idDestinatario, chatId) => {
   ]);
 
   if (usuarioA) {
+    const usuarioFormateado = formatearUsuarioNotificacion(usuarioA);
+
     emitirAUsuario(idDestinatario, 'match_mutuo', {
-      tipo:    'match_mutuo',
-      chatId:  chatId,
+      tipo:     'match_mutuo',
+      chatId,
       es_mutuo: true,
-      usuario: formatearUsuarioNotificacion(usuarioA),
+      usuario:  usuarioFormateado,
+    });
+
+    emitirNotificacionMatch(idDestinatario, {
+      tipo:     'match_mutuo',
+      chatId,
+      es_mutuo: true,
+      usuario:  usuarioFormateado,
+      mensaje:  `¡Match mutuo con ${primerNombre(usuarioA.nombre_completo)}! Ya pueden chatear.`,
     });
   }
 
   if (usuarioB) {
+    const usuarioFormateado = formatearUsuarioNotificacion(usuarioB);
+
     emitirAUsuario(idUsuario, 'match_mutuo', {
-      tipo:    'match_mutuo',
-      chatId:  chatId,
+      tipo:     'match_mutuo',
+      chatId,
       es_mutuo: true,
-      usuario: formatearUsuarioNotificacion(usuarioB),
+      usuario:  usuarioFormateado,
+    });
+
+    emitirNotificacionMatch(idUsuario, {
+      tipo:     'match_mutuo',
+      chatId,
+      es_mutuo: true,
+      usuario:  usuarioFormateado,
+      mensaje:  `¡Match mutuo con ${primerNombre(usuarioB.nombre_completo)}! Ya pueden chatear.`,
     });
   }
 };
@@ -293,6 +344,11 @@ const crearMatch = async (req, res) => {
       await emitirMatchMutuo(idUsuario, id_destinatario, chat._id);
     } else {
       await emitirNotificacionPendiente(id_destinatario, match, idUsuario);
+
+      emitirNotificacionMatch(idUsuario, {
+        tipo:    'confirmacion',
+        mensaje: `Solicitud enviada a ${primerNombre(destinatarioExiste.nombre_completo)}.`,
+      });
     }
 
     const mensaje = esMutuo
@@ -354,6 +410,19 @@ const rechazarMatch = async (req, res) => {
       { id_usuario: idUsuario, id_destinatario: id_destinatario },
       { upsert: true }
     );
+
+    try {
+      const quienRechaza = await Usuario.findById(idUsuario)
+        .select('nombre_completo')
+        .lean();
+
+      emitirNotificacionMatch(id_destinatario, {
+        tipo:    'rechazo',
+        mensaje: `${primerNombre(quienRechaza?.nombre_completo)} no aceptó tu solicitud.`,
+      });
+    } catch (notifError) {
+      console.error('[rechazarMatch] Error al emitir notificación:', notifError.message);
+    }
 
     return res.status(200).json({
       exito: true,
