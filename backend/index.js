@@ -16,6 +16,7 @@ const { Server } = require('socket.io');
 // Importamos la función de conexión a MongoDB
 const { connectDB } = require('./database');
 const { setIO } = require('./src/socket');
+const { registrarHandlersSocket } = require('./src/socketHandlers');
 const { matchesLimiter } = require('./src/middlewares/rateLimiter');
 
 // 1. Importamos todas nuestras rutas de la carpeta src/routes
