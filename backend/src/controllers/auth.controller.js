@@ -194,10 +194,22 @@ const olvideMiPassword = async (req, res) => {
         return res.status(400).json({ msg: 'El correo es obligatorio.' });
     }
 
-    if (!isSmtpConfigured()) {
-        console.error('[olvideMiPassword] SMTP no configurado. Variables requeridas: SMTP_USER + SMTP_PASS (o EMAIL_USER + EMAIL_PASSWORD).');
+    // ── Validación explícita de credenciales SMTP ────────────────────────────
+    // Se verifica antes de tocar la BD para fallar rápido con mensaje claro.
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS  || process.env.EMAIL_PASSWORD;
+
+    if (!smtpUser) {
+        console.error('[olvideMiPassword] Variable faltante: SMTP_USER (o EMAIL_USER) no está definida en el entorno.');
         return res.status(503).json({
-            msg: 'El servicio de correo no está disponible. Contacta al administrador.',
+            msg: 'El servicio de correo no está disponible en este momento. Contacta al administrador.',
+        });
+    }
+
+    if (!smtpPass) {
+        console.error('[olvideMiPassword] Variable faltante: SMTP_PASS (o EMAIL_PASSWORD) no está definida en el entorno.');
+        return res.status(503).json({
+            msg: 'El servicio de correo no está disponible en este momento. Contacta al administrador.',
         });
     }
 
@@ -207,6 +219,7 @@ const olvideMiPassword = async (req, res) => {
         const usuario = await Usuario.findOne({ email: emailNormalizado });
 
         if (!usuario) {
+            // Respuesta ambigua intencional: no revelar si el correo existe.
             return res.status(200).json({ msg: mensajeExito });
         }
 
@@ -217,30 +230,55 @@ const olvideMiPassword = async (req, res) => {
         usuario.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
         await usuario.save({ validateBeforeSave: false });
 
+        const enlaceRecuperacion = buildFrontendUrl(`nueva-password?token=${tokenPlano}`);
+
         try {
             logSmtpAudit('olvideMiPassword — antes de sendPasswordResetEmail');
+
             await sendPasswordResetEmail({
                 to:         usuario.email,
                 nombre:     usuario.nombre_completo,
                 tokenPlano,
             });
-        } catch (mailError) {
-            logSmtpError('olvideMiPassword — sendPasswordResetEmail', mailError);
 
+            console.log('========================================================');
+            console.log('[ROOMEET] Correo enviado OK a:', usuario.email);
+            console.log('[ROOMEET] Enlace de recuperación:', enlaceRecuperacion);
+            console.log('========================================================');
+
+        } catch (mailError) {
+            // Revertir el token para que no quede un token huérfano en la BD.
             usuario.resetPasswordToken   = undefined;
             usuario.resetPasswordExpires = undefined;
             await usuario.save({ validateBeforeSave: false });
 
-            if (process.env.NODE_ENV !== 'production') {
-                console.error('[olvideMiPassword] Token de recuperación (solo dev):', tokenPlano);
+            // ── Log detallado del error de Nodemailer ─────────────────────────
+            logSmtpError('olvideMiPassword — sendPasswordResetEmail', mailError);
+
+            // ── Imprimir enlace en consola para uso manual en caso necesario ──
+            console.error('[ROOMEET] Enlace que hubiera ido al correo (uso manual):', enlaceRecuperacion);
+
+            // ── Clasificar el error y devolver mensaje descriptivo al frontend ─
+            const codigo      = mailError?.code;
+            const responseCode = mailError?.responseCode;
+
+            let mensajeUsuario = 'Error al conectar con el servidor de correo, intenta más tarde.';
+
+            if (codigo === 'EAUTH' || responseCode === 535) {
+                console.error('[olvideMiPassword] Causa probable: App Password incorrecta o cuenta sin 2FA habilitado.');
+                mensajeUsuario = 'Error de autenticación con el servidor de correo. Contacta al administrador.';
+            } else if (codigo === 'ETIMEDOUT' || codigo === 'ESOCKET') {
+                console.error('[olvideMiPassword] Causa probable: Puerto SMTP bloqueado por el proveedor de hosting (Render).');
+                mensajeUsuario = 'El servidor de correo tardó demasiado en responder. Intenta más tarde.';
+            } else if (codigo === 'ECONNREFUSED') {
+                console.error('[olvideMiPassword] Causa probable: Host SMTP incorrecto o puerto incorrecto (usa 465 o 587).');
+                mensajeUsuario = 'No se pudo conectar al servidor de correo. Intenta más tarde.';
+            } else if (codigo === 'ENOTFOUND') {
+                console.error('[olvideMiPassword] Causa probable: SMTP_HOST no resuelve a ninguna IP (valor incorrecto o sin DNS).');
+                mensajeUsuario = 'No se encontró el servidor de correo. Contacta al administrador.';
             }
 
-            return res.status(503).json({
-                msg: 'No pudimos enviar el correo de recuperación. Verifica la configuración SMTP o intenta más tarde.',
-                ...(process.env.NODE_ENV !== 'production' && {
-                    detalle: formatSmtpError(mailError),
-                }),
-            });
+            return res.status(503).json({ msg: mensajeUsuario });
         }
 
         return res.status(200).json({ msg: mensajeExito });

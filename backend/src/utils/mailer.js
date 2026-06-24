@@ -5,7 +5,7 @@ const SMTP_SEND_TIMEOUT_MS = Number(process.env.SMTP_SEND_TIMEOUT_MS) || 20000;
 function getSmtpConfig() {
     return {
         host: process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587,
+        port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 465,
         user: process.env.SMTP_USER || process.env.EMAIL_USER,
         pass: process.env.SMTP_PASS || process.env.EMAIL_PASSWORD,
     };
@@ -96,19 +96,27 @@ function withTimeout(promise, ms, mensaje) {
 function createTransporter() {
     const { host, port, user, pass } = getSmtpConfig();
 
-    if (!user || !pass) {
-        throw new Error('SMTP no configurado: faltan credenciales de correo (SMTP_USER/EMAIL_USER y SMTP_PASS/EMAIL_PASSWORD).');
+    if (!user) {
+        throw new Error('Credencial faltante: SMTP_USER (o EMAIL_USER) no está definida en las variables de entorno.');
     }
+
+    if (!pass) {
+        throw new Error('Credencial faltante: SMTP_PASS (o EMAIL_PASSWORD) no está definida en las variables de entorno.');
+    }
+
+    // Puerto 465 → SSL directo (secure: true, sin STARTTLS)
+    // Puerto 587 → STARTTLS (secure: false + requireTLS: true)
+    const usaSSL = port === 465;
 
     return nodemailer.createTransport({
         host,
         port,
-        secure: port === 465,
+        secure:     usaSSL,
+        requireTLS: !usaSSL,
         auth: { user, pass },
         connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-        requireTLS: port === 587,
+        greetingTimeout:   10000,
+        socketTimeout:     15000,
         tls: {
             minVersion: 'TLSv1.2',
         },
