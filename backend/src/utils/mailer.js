@@ -46,53 +46,52 @@ function buildFrontendUrl(pathWithQuery) {
     return urlCompleta;
 }
 
-function escapeHtmlAttribute(value) {
-    return String(value).replace(/"/g, '&quot;');
-}
-
 function buildPasswordResetHtml(enlaceRecuperacion) {
-    const enlaceSeguro = escapeHtmlAttribute(enlaceRecuperacion);
-
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recuperación de contraseña — Roomeet</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f9fafb;">
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
-        <h2 style="color:#1d4ed8;margin:0 0 16px;font-size:22px;">Recupera tu contraseña</h2>
-        <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 12px;">
-            Recibimos una solicitud para restablecer la contraseña de tu cuenta Roomeet.
-        </p>
-        <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 24px;">
-            Haz clic en el botón para crear una nueva contraseña. Este enlace es válido por
-            <strong>1 hora</strong>.
-        </p>
-        <p style="text-align:center;margin:0 0 28px;">
-            <a href="${enlaceSeguro}"
-               target="_blank"
-               rel="noopener noreferrer"
-               style="display:inline-block;padding:14px 28px;background-color:#1d4ed8;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:bold;font-size:16px;">
-                Restablecer contraseña
-            </a>
-        </p>
-        <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0 0 16px;">
-            Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
-            <a href="${enlaceSeguro}"
-               target="_blank"
-               rel="noopener noreferrer"
-               style="color:#1d4ed8;word-break:break-all;text-decoration:underline;">
-                ${enlaceSeguro}
-            </a>
-        </p>
-        <p style="color:#6b7280;font-size:13px;margin:0 0 24px;">
-            Si no solicitaste esto, ignora este correo.
-        </p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-        <p style="color:#9ca3af;font-size:11px;margin:0;">Equipo Roomeet · Chile</p>
-    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding:24px 16px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;">
+                    <tr>
+                        <td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#374151;">
+                            <h2 style="color:#1d4ed8;margin:0 0 16px;font-size:22px;">Recupera tu contraseña</h2>
+                            <p style="font-size:15px;line-height:1.6;margin:0 0 12px;">
+                                Recibimos una solicitud para restablecer la contraseña de tu cuenta Roomeet.
+                            </p>
+                            <p style="font-size:15px;line-height:1.6;margin:0 0 24px;">
+                                Haz clic en el botón para crear una nueva contraseña. Este enlace es válido por
+                                <strong>1 hora</strong>.
+                            </p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 24px auto;">
+                                <tr>
+                                    <td align="center" bgcolor="#007bff" style="border-radius:5px;">
+                                        <a href="${enlaceRecuperacion}" target="_blank" rel="noopener noreferrer" style="background-color:#007bff;color:#ffffff;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;font-size:16px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">Restablecer contraseña</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="font-size:13px;line-height:1.6;margin:0 0 16px;color:#6b7280;">
+                                Si el botón no funciona,
+                                <a href="${enlaceRecuperacion}" target="_blank" rel="noopener noreferrer" style="color:#007bff;text-decoration:underline;">haz clic aquí para restablecer tu contraseña</a>.
+                            </p>
+                            <p style="font-size:13px;margin:0 0 24px;color:#6b7280;">
+                                Si no solicitaste esto, ignora este correo.
+                            </p>
+                            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+                            <p style="color:#9ca3af;font-size:11px;margin:0;">Equipo Roomeet · Chile</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>`;
 }
@@ -111,6 +110,10 @@ async function sendPasswordResetEmail(to, token) {
     }
 
     const enlaceRecuperacion = buildFrontendUrl(`nueva-password?token=${encodeURIComponent(token)}`);
+    const htmlCorreo = buildPasswordResetHtml(enlaceRecuperacion);
+
+    console.log('[mailer] URL de recuperación:', enlaceRecuperacion);
+    console.log('[mailer] HTML enviado a SendGrid:\n', htmlCorreo);
 
     const mensaje = {
         to: to,
@@ -119,7 +122,7 @@ async function sendPasswordResetEmail(to, token) {
             name: 'Roomeet',
         },
         subject: 'Recuperación de contraseña — Roomeet',
-        html: buildPasswordResetHtml(enlaceRecuperacion),
+        html: htmlCorreo,
         text: [
             'Recuperación de contraseña — Roomeet',
             '',
