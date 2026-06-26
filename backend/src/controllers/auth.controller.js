@@ -5,6 +5,7 @@ const Usuario = require('../models/Usuario');
 const {
     isSendGridConfigured,
     buildFrontendUrl,
+    buildPasswordResetRedirectUrl,
     sendPasswordResetEmail,
 } = require('../utils/mailer');
 
@@ -213,14 +214,14 @@ const olvideMiPassword = async (req, res) => {
         usuario.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
         await usuario.save({ validateBeforeSave: false });
 
-        const enlaceRecuperacion = buildFrontendUrl(`nueva-password?token=${tokenPlano}`);
+        const enlaceRecuperacion = buildPasswordResetRedirectUrl(tokenPlano);
 
         try {
             await sendPasswordResetEmail(usuario.email, tokenPlano);
 
             console.log('========================================================');
             console.log('[ROOMEET] Correo enviado OK a:', usuario.email);
-            console.log('[ROOMEET] Enlace de recuperación:', enlaceRecuperacion);
+            console.log('[ROOMEET] Enlace de recuperación (redirect):', enlaceRecuperacion);
             console.log('========================================================');
 
         } catch (mailError) {
@@ -279,6 +280,20 @@ const testSmtp = async (req, res) => {
     });
 };
 
+// ─── REDIRECT RECUPERACIÓN (enlace sin # para clientes de correo) ─────────────
+// GET /api/auth/recuperar-redirect?token=...
+const recuperarRedirect = (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
+
+    if (!token) {
+        return res.redirect(buildFrontendUrl('recuperar'));
+    }
+
+    const destino = buildFrontendUrl(`nueva-password?token=${encodeURIComponent(token)}`);
+
+    return res.redirect(302, destino);
+};
+
 // ─── RESET DE CONTRASEÑA ──────────────────────────────────────────────────────
 // POST /api/auth/nueva-password  →  { token, password }
 const resetPassword = async (req, res) => {
@@ -321,6 +336,7 @@ module.exports = {
     verificarEmail,
     loginUsuario,
     olvideMiPassword,
+    recuperarRedirect,
     testSmtp,
     resetPassword,
 };

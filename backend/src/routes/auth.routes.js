@@ -6,6 +6,7 @@ const {
     verificarEmail,
     loginUsuario,
     olvideMiPassword,
+    recuperarRedirect,
     testSmtp,
     resetPassword,
 } = require('../controllers/auth.controller');
@@ -19,6 +20,7 @@ router.post('/registro',            authGeneralLimiter, registrarUsuario);
 router.get ('/verificar-email',     authGeneralLimiter, verificarEmail);
 router.post('/login',               authStrictLimiter,  loginUsuario);
 router.post('/recuperar-password',  authStrictLimiter,  olvideMiPassword);
+router.get ('/recuperar-redirect',  authGeneralLimiter, recuperarRedirect);
 router.get ('/test-smtp',           authGeneralLimiter, testSmtp);
 router.post('/nueva-password',      authGeneralLimiter, resetPassword);
 

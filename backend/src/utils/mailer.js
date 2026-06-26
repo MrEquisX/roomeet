@@ -6,6 +6,8 @@ if (sendGridApiKey) {
     sgMail.setApiKey(sendGridApiKey);
 }
 
+const DEFAULT_BACKEND_URL_PRODUCCION = 'https://roomeet-backend.onrender.com';
+
 function isSendGridConfigured() {
     const tieneApiKey = Boolean(process.env.SENDGRID_API_KEY);
     const tieneRemitente = Boolean(process.env.SENDGRID_SENDER_EMAIL);
@@ -33,6 +35,16 @@ function getFrontendBaseUrl() {
     return urlSinBarraFinal;
 }
 
+function getBackendBaseUrl() {
+    const urlBase = process.env.BACKEND_URL
+        || process.env.RENDER_EXTERNAL_URL
+        || (process.env.NODE_ENV === 'production' ? DEFAULT_BACKEND_URL_PRODUCCION : 'http://localhost:3000');
+
+    const urlSinBarraFinal = urlBase.trim().replace(/\/+$/, '');
+
+    return urlSinBarraFinal;
+}
+
 function buildFrontendUrl(pathWithQuery) {
     const base = getFrontendBaseUrl();
     let path = pathWithQuery;
@@ -44,6 +56,13 @@ function buildFrontendUrl(pathWithQuery) {
     const urlCompleta = `${base}/#/${path}`;
 
     return urlCompleta;
+}
+
+function buildPasswordResetRedirectUrl(token) {
+    const base = getBackendBaseUrl();
+    const tokenCodificado = encodeURIComponent(token);
+
+    return `${base}/api/auth/recuperar-redirect?token=${tokenCodificado}`;
 }
 
 function buildPasswordResetHtml(enlaceRecuperacion) {
@@ -96,6 +115,20 @@ function buildPasswordResetHtml(enlaceRecuperacion) {
 </html>`;
 }
 
+function logSendGridPayload(mensaje) {
+    let payloadParaApi = mensaje;
+
+    try {
+        const { Mail } = require('@sendgrid/helpers').classes;
+        payloadParaApi = Mail.create(mensaje).toJSON();
+    } catch (error) {
+        console.warn('[mailer] No se pudo serializar payload SendGrid con helpers:', error.message);
+    }
+
+    console.log('[mailer] Payload JSON hacia SendGrid API:');
+    console.log(JSON.stringify(payloadParaApi, null, 2));
+}
+
 async function sendPasswordResetEmail(to, token) {
     const remitenteEmail = process.env.SENDGRID_SENDER_EMAIL;
 
@@ -109,10 +142,10 @@ async function sendPasswordResetEmail(to, token) {
         throw errorRemitente;
     }
 
-    const enlaceRecuperacion = buildFrontendUrl(`nueva-password?token=${encodeURIComponent(token)}`);
+    const enlaceRecuperacion = buildPasswordResetRedirectUrl(token);
     const htmlCorreo = buildPasswordResetHtml(enlaceRecuperacion);
 
-    console.log('[mailer] URL de recuperación:', enlaceRecuperacion);
+    console.log('[mailer] URL de recuperación (redirect sin hash):', enlaceRecuperacion);
     console.log('[mailer] HTML enviado a SendGrid:\n', htmlCorreo);
 
     const mensaje = {
@@ -143,6 +176,8 @@ async function sendPasswordResetEmail(to, token) {
         },
     };
 
+    logSendGridPayload(mensaje);
+
     try {
         const respuesta = await sgMail.send(mensaje);
 
@@ -163,6 +198,8 @@ async function sendPasswordResetEmail(to, token) {
 module.exports = {
     isSendGridConfigured,
     getFrontendBaseUrl,
+    getBackendBaseUrl,
     buildFrontendUrl,
+    buildPasswordResetRedirectUrl,
     sendPasswordResetEmail,
 };
