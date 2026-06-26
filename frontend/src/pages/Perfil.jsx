@@ -121,13 +121,7 @@ const Perfil = () => {
   const edad = calcularEdad(fechaNac);
   const intereses = usuario.intereses || [];
   const preferencias = usuario.preferencias || {};
-  const filtros = usuario.filtros || {};
   const ubicacion = usuario.ubicacion_sede || {};
-
-  const hayFiltros =
-    filtros.soloMismaUniversidad ||
-    filtros.soloMismaCarrera ||
-    (filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente');
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-24 relative">
@@ -360,23 +354,6 @@ const Perfil = () => {
             )}
           </div>
         </section>
-
-        {hayFiltros && (
-          <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-800 mb-3">Busco compañeros que…</h3>
-            <div className="flex flex-wrap gap-2">
-              {filtros.soloMismaUniversidad && (
-                <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">🎓 Sean de mi U</span>
-              )}
-              {filtros.soloMismaCarrera && (
-                <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">📚 Sean de mi carrera</span>
-              )}
-              {filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente' && (
-                <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">👤 {filtros.generoPreferido}</span>
-              )}
-            </div>
-          </section>
-        )}
 
         <section>
           <h3 className="font-bold text-gray-800 mb-3 ml-2">Intereses</h3>

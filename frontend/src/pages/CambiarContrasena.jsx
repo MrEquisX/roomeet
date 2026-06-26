@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiClient } from '../services/apiClient';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 const CambiarContrasena = (props) => {
   const onClose = props.onClose;
@@ -129,8 +130,7 @@ const CambiarContrasena = (props) => {
           <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">
             Contraseña Actual
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={contrasenaActual}
             onChange={(evento) => {
               setContrasenaActual(evento.target.value);
@@ -138,7 +138,7 @@ const CambiarContrasena = (props) => {
             placeholder="••••••••"
             autoComplete="current-password"
             disabled={enviando}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm disabled:opacity-60"
           />
         </div>
 
@@ -146,8 +146,7 @@ const CambiarContrasena = (props) => {
           <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">
             Nueva Contraseña
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={nuevaContrasena}
             onChange={(evento) => {
               setNuevaContrasena(evento.target.value);
@@ -155,7 +154,7 @@ const CambiarContrasena = (props) => {
             placeholder="••••••••"
             autoComplete="new-password"
             disabled={enviando}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm disabled:opacity-60"
           />
         </div>
 
@@ -163,8 +162,7 @@ const CambiarContrasena = (props) => {
           <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">
             Confirmar Nueva Contraseña
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={confirmarContrasena}
             onChange={(evento) => {
               setConfirmarContrasena(evento.target.value);
@@ -172,7 +170,7 @@ const CambiarContrasena = (props) => {
             placeholder="••••••••"
             autoComplete="new-password"
             disabled={enviando}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm disabled:opacity-60"
           />
         </div>
 

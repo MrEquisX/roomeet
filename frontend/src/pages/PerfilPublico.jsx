@@ -169,19 +169,7 @@ const PerfilPublico = (props) => {
   const rol = usuario.rol || '';
   const intereses = usuario.intereses || [];
   const preferencias = usuario.preferencias || {};
-  const filtros = usuario.filtros || {};
   const alojamiento = usuario.vivienda || null;
-
-  let hayFiltros = false;
-  if (filtros.soloMismaUniversidad) {
-    hayFiltros = true;
-  }
-  if (filtros.soloMismaCarrera) {
-    hayFiltros = true;
-  }
-  if (filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente') {
-    hayFiltros = true;
-  }
 
   let bloqueOfreceVivienda = null;
   if (usuario.vivienda && usuario.vivienda._id) {
@@ -431,29 +419,6 @@ const PerfilPublico = (props) => {
             )}
           </div>
         </section>
-
-        {hayFiltros && (
-          <section className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-800 mb-3">Busca compañeros que…</h3>
-            <div className="flex flex-wrap gap-2">
-              {filtros.soloMismaUniversidad && (
-                <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">
-                  🎓 Sean de mi U
-                </span>
-              )}
-              {filtros.soloMismaCarrera && (
-                <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">
-                  📚 Sean de mi carrera
-                </span>
-              )}
-              {filtros.generoPreferido && filtros.generoPreferido !== 'Indiferente' && (
-                <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-wider">
-                  👤 {filtros.generoPreferido}
-                </span>
-              )}
-            </div>
-          </section>
-        )}
 
         <section>
           <h3 className="font-bold text-gray-800 mb-3 ml-2">Intereses</h3>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/env.js';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -122,8 +123,7 @@ function Login() {
               Contraseña
             </label>
             <div className="relative">
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={function onPasswordChange(e) {
                   setPassword(e.target.value);
@@ -131,6 +131,7 @@ function Login() {
                 required
                 disabled={cargando}
                 placeholder="••••••••"
+                autoComplete="current-password"
                 className="w-full px-4 py-3 rounded-2xl border border-neutral-200 bg-surface text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-60"
               />
             </div>

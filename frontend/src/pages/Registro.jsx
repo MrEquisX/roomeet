@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import PasswordInput from '../components/PasswordInput.jsx';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Icon } from 'leaflet';
@@ -361,14 +362,14 @@ const Registro = () => {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1 ml-1">Contraseña</label>
-              <input
+              <PasswordInput
                 required
-                type="password"
                 name="password"
                 placeholder="••••••••"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 value={form.password}
                 onChange={handleChange}
+                autoComplete="new-password"
               />
             </div>
           </section>

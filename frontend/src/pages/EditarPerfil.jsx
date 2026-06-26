@@ -103,9 +103,6 @@ const EditarPerfil = () => {
   const [nivelRuido, setNivelRuido] = useState(3);
   const [horarioPreferido, setHorarioPreferido] = useState('Indiferente');
 
-  const [soloMismaUniversidad, setSoloMismaUniversidad] = useState(false);
-  const [soloMismaCarrera, setSoloMismaCarrera] = useState(false);
-  const [generoPreferido, setGeneroPreferido] = useState('Indiferente');
   const [interesesSeleccionados, setInteresesSeleccionados] = useState([]);
 
   const CROP_SIZE = 280;
@@ -153,7 +150,6 @@ const EditarPerfil = () => {
         const data = await res.json();
 
         const pref = data.preferencias || {};
-        const filtros = data.filtros || {};
         const intereses = Array.isArray(data.intereses) ? data.intereses : [];
         const ubic = data.ubicacion_sede || {};
 
@@ -189,9 +185,6 @@ const EditarPerfil = () => {
         setNivelOrden(typeof pref.orden === 'number' ? pref.orden : 3);
         setNivelRuido(typeof pref.ruido === 'number' ? pref.ruido : 3);
         setHorarioPreferido(pref.horarioPreferido || 'Indiferente');
-        setSoloMismaUniversidad(Boolean(filtros.soloMismaUniversidad));
-        setSoloMismaCarrera(Boolean(filtros.soloMismaCarrera));
-        setGeneroPreferido(filtros.generoPreferido || 'Indiferente');
         setInteresesSeleccionados(
           intereses.map((i) => {
             if (typeof i === 'string') {
@@ -486,9 +479,6 @@ const EditarPerfil = () => {
       nivelOrden,
       nivelRuido,
       horarioPreferido,
-      soloMismaUniversidad,
-      soloMismaCarrera,
-      generoPreferido,
       interesesSeleccionados,
     };
 
@@ -869,26 +859,6 @@ const EditarPerfil = () => {
                 <option value="Indiferente">Indiferente</option>
               </select>
             </div>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">Busco compañeros que…</h2>
-            <div className="grid grid-cols-2 gap-2">
-              <label className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer text-xs font-bold ${soloMismaUniversidad ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                <input type="checkbox" checked={soloMismaUniversidad} onChange={(e) => { setSoloMismaUniversidad(e.target.checked); }} className="accent-blue-600" />
-                🎓 Mi universidad
-              </label>
-              <label className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer text-xs font-bold ${soloMismaCarrera ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                <input type="checkbox" checked={soloMismaCarrera} onChange={(e) => { setSoloMismaCarrera(e.target.checked); }} className="accent-blue-600" />
-                📚 Mi carrera
-              </label>
-            </div>
-            <select value={generoPreferido} onChange={(e) => { setGeneroPreferido(e.target.value); }} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm">
-              <option value="Indiferente">Indiferente</option>
-              <option value="Solo Mujeres">Solo Mujeres</option>
-              <option value="Solo Hombres">Solo Hombres</option>
-              <option value="Mixto">Mixto</option>
-            </select>
           </section>
 
           <section className="space-y-3">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from '../config/env.js';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 const NuevaPassword = () => {
   const navigate = useNavigate();
@@ -122,15 +123,16 @@ const NuevaPassword = () => {
             <label className="block text-sm font-semibold text-gray-700 mb-2 ml-1">
               Nueva Contraseña
             </label>
-            <input 
-              type="password" 
+            <PasswordInput
               required
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+              }}
               placeholder="••••••••"
               autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               disabled={feedback.loading}
+              className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60"
             />
           </div>
 
@@ -138,15 +140,16 @@ const NuevaPassword = () => {
             <label className="block text-sm font-semibold text-gray-700 mb-2 ml-1">
               Confirmar Nueva Contraseña
             </label>
-            <input 
-              type="password" 
+            <PasswordInput
               required
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+              }}
               placeholder="••••••••"
               autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               disabled={feedback.loading}
+              className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60"
             />
           </div>
 

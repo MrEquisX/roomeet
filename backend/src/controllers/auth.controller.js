@@ -3,14 +3,9 @@ const jwt     = require('jsonwebtoken');
 const crypto  = require('crypto');
 const Usuario = require('../models/Usuario');
 const {
-    isSmtpConfigured,
+    isSendGridConfigured,
     buildFrontendUrl,
     sendPasswordResetEmail,
-    verifySmtpConnection,
-    formatSmtpError,
-    logSmtpAudit,
-    logSmtpError,
-    getSmtpConfig,
 } = require('../utils/mailer');
 
 // ─── REGISTRO ─────────────────────────────────────────────────────────────────
@@ -194,20 +189,8 @@ const olvideMiPassword = async (req, res) => {
         return res.status(400).json({ msg: 'El correo es obligatorio.' });
     }
 
-    // ── Validación explícita de credenciales SMTP ────────────────────────────
-    // Se verifica antes de tocar la BD para fallar rápido con mensaje claro.
-    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-    const smtpPass = process.env.SMTP_PASS  || process.env.EMAIL_PASSWORD;
-
-    if (!smtpUser) {
-        console.error('[olvideMiPassword] Variable faltante: SMTP_USER (o EMAIL_USER) no está definida en el entorno.');
-        return res.status(503).json({
-            msg: 'El servicio de correo no está disponible en este momento. Contacta al administrador.',
-        });
-    }
-
-    if (!smtpPass) {
-        console.error('[olvideMiPassword] Variable faltante: SMTP_PASS (o EMAIL_PASSWORD) no está definida en el entorno.');
+    if (!isSendGridConfigured()) {
+        console.error('[olvideMiPassword] SendGrid no configurado: faltan SENDGRID_API_KEY o SENDGRID_SENDER_EMAIL.');
         return res.status(503).json({
             msg: 'El servicio de correo no está disponible en este momento. Contacta al administrador.',
         });
@@ -233,13 +216,7 @@ const olvideMiPassword = async (req, res) => {
         const enlaceRecuperacion = buildFrontendUrl(`nueva-password?token=${tokenPlano}`);
 
         try {
-            logSmtpAudit('olvideMiPassword — antes de sendPasswordResetEmail');
-
-            await sendPasswordResetEmail({
-                to:         usuario.email,
-                nombre:     usuario.nombre_completo,
-                tokenPlano,
-            });
+            await sendPasswordResetEmail(usuario.email, tokenPlano);
 
             console.log('========================================================');
             console.log('[ROOMEET] Correo enviado OK a:', usuario.email);
@@ -247,35 +224,20 @@ const olvideMiPassword = async (req, res) => {
             console.log('========================================================');
 
         } catch (mailError) {
-            // Revertir el token para que no quede un token huérfano en la BD.
             usuario.resetPasswordToken   = undefined;
             usuario.resetPasswordExpires = undefined;
             await usuario.save({ validateBeforeSave: false });
 
-            // ── Log detallado del error de Nodemailer ─────────────────────────
-            logSmtpError('olvideMiPassword — sendPasswordResetEmail', mailError);
-
-            // ── Imprimir enlace en consola para uso manual en caso necesario ──
             console.error('[ROOMEET] Enlace que hubiera ido al correo (uso manual):', enlaceRecuperacion);
 
-            // ── Clasificar el error y devolver mensaje descriptivo al frontend ─
-            const codigo      = mailError?.code;
-            const responseCode = mailError?.responseCode;
+            let mensajeUsuario = 'Error al enviar el correo de recuperación. Intenta más tarde.';
 
-            let mensajeUsuario = 'Error al conectar con el servidor de correo, intenta más tarde.';
+            if (mailError.response) {
+                const statusCode = mailError.response.statusCode;
 
-            if (codigo === 'EAUTH' || responseCode === 535) {
-                console.error('[olvideMiPassword] Causa probable: App Password incorrecta o cuenta sin 2FA habilitado.');
-                mensajeUsuario = 'Error de autenticación con el servidor de correo. Contacta al administrador.';
-            } else if (codigo === 'ETIMEDOUT' || codigo === 'ESOCKET') {
-                console.error('[olvideMiPassword] Causa probable: Puerto SMTP bloqueado por el proveedor de hosting (Render).');
-                mensajeUsuario = 'El servidor de correo tardó demasiado en responder. Intenta más tarde.';
-            } else if (codigo === 'ECONNREFUSED') {
-                console.error('[olvideMiPassword] Causa probable: Host SMTP incorrecto o puerto incorrecto (usa 465 o 587).');
-                mensajeUsuario = 'No se pudo conectar al servidor de correo. Intenta más tarde.';
-            } else if (codigo === 'ENOTFOUND') {
-                console.error('[olvideMiPassword] Causa probable: SMTP_HOST no resuelve a ninguna IP (valor incorrecto o sin DNS).');
-                mensajeUsuario = 'No se encontró el servidor de correo. Contacta al administrador.';
+                if (statusCode === 401 || statusCode === 403) {
+                    mensajeUsuario = 'Error de autenticación con SendGrid. Contacta al administrador.';
+                }
             }
 
             return res.status(503).json({ msg: mensajeUsuario });
@@ -284,51 +246,37 @@ const olvideMiPassword = async (req, res) => {
         return res.status(200).json({ msg: mensajeExito });
 
     } catch (error) {
-        logSmtpError('olvideMiPassword — error general', error);
+        console.error('[olvideMiPassword] Error general:', error.message);
         return res.status(500).json({ msg: 'Error interno. Intenta más tarde.' });
     }
 };
 
-// ─── DIAGNÓSTICO SMTP (solo para depuración) ─────────────────────────────────
-// GET /api/auth/test-smtp?secret=TU_SMTP_TEST_SECRET
+// ─── DIAGNÓSTICO SENDGRID (solo para depuración) ─────────────────────────────
+// GET /api/auth/test-smtp?secret=TU_SENDGRID_TEST_SECRET
 const testSmtp = async (req, res) => {
-    const secretoEnv = process.env.SMTP_TEST_SECRET;
+    const secretoEnv = process.env.SENDGRID_TEST_SECRET || process.env.SMTP_TEST_SECRET;
     const secretoReq = req.query.secret || req.headers['x-smtp-test-secret'];
 
     if (process.env.NODE_ENV === 'production') {
         if (!secretoEnv || secretoReq !== secretoEnv) {
             return res.status(403).json({
                 ok:  false,
-                msg: 'Forbidden. En producción debes pasar ?secret=SMTP_TEST_SECRET configurado en Render.',
+                msg: 'Forbidden. En producción debes pasar ?secret=SENDGRID_TEST_SECRET configurado en Render.',
             });
         }
     }
 
-    try {
-        const cfg = getSmtpConfig();
-        const resultado = await verifySmtpConnection();
+    const configurado = isSendGridConfigured();
 
-        return res.status(resultado.ok ? 200 : 503).json({
-            ok:     resultado.ok,
-            fase:   resultado.fase,
-            mensaje: resultado.mensaje || null,
-            error:  resultado.error || null,
-            config: {
-                host:           cfg.host,
-                port:           cfg.port,
-                userConfigured: Boolean(cfg.user),
-                passConfigured: Boolean(cfg.pass),
-                isSmtpConfigured: isSmtpConfigured(),
-            },
-        });
-    } catch (error) {
-        logSmtpError('testSmtp — error inesperado', error);
-        return res.status(500).json({
-            ok:    false,
-            msg:   'Error inesperado al probar SMTP.',
-            error: formatSmtpError(error),
-        });
-    }
+    return res.status(configurado ? 200 : 503).json({
+        ok: configurado,
+        proveedor: 'sendgrid',
+        config: {
+            apiKeyConfigured: Boolean(process.env.SENDGRID_API_KEY),
+            senderConfigured: Boolean(process.env.SENDGRID_SENDER_EMAIL),
+            senderEmail: process.env.SENDGRID_SENDER_EMAIL || null,
+        },
+    });
 };
 
 // ─── RESET DE CONTRASEÑA ──────────────────────────────────────────────────────

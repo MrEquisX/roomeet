@@ -9,19 +9,6 @@ import {
 } from '../utils/perfilHelpers';
 import { API_URL } from '../config/env.js';
 
-const OPCIONES_PREFERENCIA_ACADEMICA = [
-  { valor: 'indiferente', etiqueta: 'Indiferente' },
-  { valor: 'misma',       etiqueta: 'Sí, de mi misma institución' },
-  { valor: 'otra',        etiqueta: 'No, prefiero de otra' },
-];
-
-const preferenciaAcademicaABoolean = (valor) => {
-  if (valor === 'misma') {
-    return true;
-  }
-  return false;
-};
-
 const CompletarPerfil = (props) => {
   const navigate = useNavigate();
 
@@ -50,10 +37,6 @@ const CompletarPerfil = (props) => {
   const [nivelOrden, setNivelOrden] = useState(3);
   const [nivelRuido, setNivelRuido] = useState(3);
   const [horarioPreferido, setHorarioPreferido] = useState('Indiferente');
-
-  const [preferenciaUniversidad, setPreferenciaUniversidad] = useState('indiferente');
-  const [preferenciaCarrera, setPreferenciaCarrera] = useState('indiferente');
-  const [generoPreferido, setGeneroPreferido] = useState('Indiferente');
 
   const [interesesSeleccionados, setInteresesSeleccionados] = useState([]);
 
@@ -268,9 +251,6 @@ const CompletarPerfil = (props) => {
     setEnviando(true);
     setMensaje('');
 
-    const soloMismaUniversidad = preferenciaAcademicaABoolean(preferenciaUniversidad);
-    const soloMismaCarrera     = preferenciaAcademicaABoolean(preferenciaCarrera);
-
     const payload = {
       biografia,
       fuma,
@@ -279,9 +259,6 @@ const CompletarPerfil = (props) => {
       nivelOrden,
       nivelRuido,
       horarioPreferido,
-      soloMismaUniversidad,
-      soloMismaCarrera,
-      generoPreferido,
       interesesSeleccionados,
     };
 
@@ -546,70 +523,6 @@ const CompletarPerfil = (props) => {
                 <option value="Diurno">Diurno (Activo de día, duermo de noche)</option>
                 <option value="Nocturno">Nocturno (Estudio/Trabajo de noche)</option>
                 <option value="Indiferente">Indiferente (Horarios flexibles)</option>
-              </select>
-            </div>
-          </section>
-
-          <section className="space-y-4">
-            <h2 className="text-sm font-bold text-blue-600 border-b border-gray-100 pb-1 uppercase tracking-wider">
-              Busco compañeros que…
-            </h2>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-2 ml-1">
-                🎓 Universidad
-              </label>
-              <select
-                value={preferenciaUniversidad}
-                onChange={(e) => {
-                  setPreferenciaUniversidad(e.target.value);
-                }}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
-              >
-                {OPCIONES_PREFERENCIA_ACADEMICA.map((opcion) => {
-                  return (
-                    <option key={opcion.valor} value={opcion.valor}>
-                      {opcion.etiqueta}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-2 ml-1">
-                📚 Carrera
-              </label>
-              <select
-                value={preferenciaCarrera}
-                onChange={(e) => {
-                  setPreferenciaCarrera(e.target.value);
-                }}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
-              >
-                {OPCIONES_PREFERENCIA_ACADEMICA.map((opcion) => {
-                  return (
-                    <option key={opcion.valor} value={opcion.valor}>
-                      {opcion.etiqueta}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Género preferido</label>
-              <select
-                value={generoPreferido}
-                onChange={(e) => {
-                  setGeneroPreferido(e.target.value);
-                }}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
-              >
-                <option value="Indiferente">Indiferente</option>
-                <option value="Solo Mujeres">Solo Mujeres</option>
-                <option value="Solo Hombres">Solo Hombres</option>
-                <option value="Mixto">Mixto</option>
               </select>
             </div>
           </section>
